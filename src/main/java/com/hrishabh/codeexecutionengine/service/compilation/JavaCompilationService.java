@@ -15,6 +15,11 @@ public class JavaCompilationService implements CompilationService {
     private static final String DOCKER_IMAGE = "openjdk:17-jdk-slim";
 
     @Override
+    public String getLanguage() {
+        return "java";
+    }
+
+    @Override
     public CompilationResult compile(String submissionId, Path submissionPath, Consumer<String> logConsumer)
             throws IOException, InterruptedException {
 

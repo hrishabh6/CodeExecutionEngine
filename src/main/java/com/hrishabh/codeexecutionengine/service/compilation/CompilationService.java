@@ -7,6 +7,8 @@ import java.nio.file.Path;
 import java.util.function.Consumer;
 
 public interface CompilationService {
+    String getLanguage(); // "java", "cpp"
+
     /**
      * Compiles Java code located at the given submissionPath using Docker.
      *

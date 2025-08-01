@@ -1,4 +1,4 @@
-package com.hrishabh.codeexecutionengine.service.compilation;
+package com.hrishabh.codeexecutionengine.service.execution;
 
 
 import com.hrishabh.codeexecutionengine.dto.ExecutionResult; // Corrected import to new ExecutionResult DTO
@@ -18,6 +18,11 @@ public class JavaExecutionService implements ExecutionService {
 
     private static final String DOCKER_IMAGE = "openjdk:17-jdk-slim";
     private static final long EXECUTION_TIMEOUT_SECONDS = 10;
+
+    @Override
+    public String getLanguage() {
+        return "java";
+    }
 
     @Override
     public ExecutionResult run(String submissionId, Path submissionPath, String fullyQualifiedMainClass, Consumer<String> logConsumer)

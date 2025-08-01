@@ -10,7 +10,7 @@ import java.util.List;
 @AllArgsConstructor
 public class CodeExecutionResultDTO {
     private String submissionId;
-    private String overallStatus; // e.g., "COMPILATION_ERROR", "RUNTIME_ERROR", "SUCCESS", "TIMEOUT", "INTERNAL_ERROR"
+    private Status overallStatus; // e.g., "COMPILATION_ERROR", "RUNTIME_ERROR", "SUCCESS", "TIMEOUT", "INTERNAL_ERROR"
     private String compilationOutput; // Stdout/stderr from compilation phase + raw execution log
     private List<TestCaseOutput> testCaseOutputs; // Renamed to accurately reflect what it holds
 

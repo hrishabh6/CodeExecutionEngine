@@ -1,4 +1,4 @@
-package com.hrishabh.codeexecutionengine.service.compilation;
+package com.hrishabh.codeexecutionengine.service.execution;
 
 import com.hrishabh.codeexecutionengine.dto.ExecutionResult; // Corrected import to new ExecutionResult DTO
 import java.io.IOException;
@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.util.function.Consumer;
 
 public interface ExecutionService {
+    String getLanguage(); // "java", "cpp"
+
     /**
      * Executes compiled Java code (Main.class) located at the given submissionPath using Docker.
      *

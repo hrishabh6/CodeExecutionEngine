@@ -51,8 +51,10 @@ public class CodeExecutionEngineApplication implements CommandLineRunner {
                 submissionId,
                 fixedSubmissionPath,
                 fullyQualifiedMainClass,
-                System.out::println // Real-time Docker logs
+                "java", // Required language parameter
+                System.out::println
         );
+
 
         // --- 3. Process and Display Results (as an external consumer would) ---
         System.out.println("\n--- Final Execution Result for Submission " + submissionId + " ---");

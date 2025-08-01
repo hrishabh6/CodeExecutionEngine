@@ -3,8 +3,11 @@ package com.hrishabh.codeexecutionengine.service.codeexecutionservice;
 import com.hrishabh.codeexecutionengine.dto.CodeExecutionResultDTO;
 import com.hrishabh.codeexecutionengine.dto.CompilationResult; // DTO for compilation service output
 import com.hrishabh.codeexecutionengine.dto.ExecutionResult;   // DTO for execution service output
+import com.hrishabh.codeexecutionengine.dto.Status;
 import com.hrishabh.codeexecutionengine.service.compilation.CompilationService; // Interface for compilation
-import com.hrishabh.codeexecutionengine.service.compilation.ExecutionService;
+import com.hrishabh.codeexecutionengine.service.execution.ExecutionService;
+import com.hrishabh.codeexecutionengine.service.factory.CompilationServiceFactory;
+import com.hrishabh.codeexecutionengine.service.factory.ExecutionServiceFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -17,13 +20,15 @@ import java.util.function.Consumer;
 @Service
 public class CodeExecutorService {
 
-    private final CompilationService compilationService;
-    private final ExecutionService executionService;
+    private final CompilationServiceFactory compilationFactory;
+    private final ExecutionServiceFactory executionFactory;
 
-    // Spring will auto-wire the concrete implementations (e.g., JavaCompilationService, JavaExecutionService)
-    public CodeExecutorService(CompilationService compilationService, ExecutionService executionService) {
-        this.compilationService = compilationService;
-        this.executionService = executionService;
+    public CodeExecutorService(
+            CompilationServiceFactory compilationFactory,
+            ExecutionServiceFactory executionFactory
+    ) {
+        this.compilationFactory = compilationFactory;
+        this.executionFactory = executionFactory;
     }
 
     /**
@@ -43,6 +48,7 @@ public class CodeExecutorService {
             String submissionId,
             Path submissionRootPath,
             String fullyQualifiedMainClass,
+            String language,
             Consumer<String> logConsumer) { // Removed CodeSubmissionDTO from signature
 
         // Validate submission path
@@ -50,14 +56,18 @@ public class CodeExecutorService {
         if (!submissionDir.exists() || !submissionDir.isDirectory()) {
             return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
-                    .overallStatus("INTERNAL_ERROR")
+                    .overallStatus(Status.INTERNAL_ERROR)
                     .compilationOutput("Submission directory not found or not a directory: " + submissionRootPath)
                     .testCaseOutputs(List.of()) // Use List.of() for empty immutable list
                     .build();
         }
 
         String overallCompilationOutput = ""; // To store compilation messages for final DTO
-        List<CodeExecutionResultDTO.TestCaseOutput> finalTestCaseOutputs = new ArrayList<>(); // To store processed test case outputs
+        CompilationService compilationService = compilationFactory.getService(language);
+        ExecutionService executionService = executionFactory.getService(language);
+
+        List<CodeExecutionResultDTO.TestCaseOutput> finalTestCaseOutputs = new ArrayList<>();
+
 
         try {
             // --- Step 1: Compile Code ---
@@ -68,7 +78,7 @@ public class CodeExecutorService {
                 // If compilation fails, return with compilation error status and output
                 return CodeExecutionResultDTO.builder()
                         .submissionId(submissionId)
-                        .overallStatus("COMPILATION_ERROR")
+                        .overallStatus(Status.COMPILATON_ERROR)
                         .compilationOutput(overallCompilationOutput)
                         .testCaseOutputs(List.of()) // No test case outputs on compilation error
                         .build();
@@ -78,20 +88,20 @@ public class CodeExecutorService {
             // If compilation was successful, proceed to execution
             ExecutionResult runResult = executionService.run(submissionId, submissionRootPath, fullyQualifiedMainClass, logConsumer);
 
-            String overallStatus;
+            Status overallStatus;
 
             // Determine overall status based on execution outcome
             if (runResult.isTimedOut()) {
-                overallStatus = "TIMEOUT";
+                overallStatus = Status.TIMEOUT;
             } else if (runResult.getExitCode() != 0) {
                 // A non-zero exit code typically indicates a JVM-level error (e.g., unhandled exception, OOM)
-                overallStatus = "RUNTIME_ERROR";
+                overallStatus = Status.RUNTIME_ERROR;
             } else {
                 // If exit code is 0, execution completed without crashing the JVM.
                 // The actual outputs of individual test cases (and any errors caught by Main.java's try-catch)
                 // are contained within runResult.getTestCaseOutputs().
                 // The consumer of this library will determine PASSED/FAILED.
-                overallStatus = "SUCCESS"; // Code ran to completion without crashing
+                overallStatus = Status.SUCCESS; // Code ran to completion without crashing
             }
 
             // Map ExecutionResult.TestCaseOutput to CodeExecutionResultDTO.TestCaseOutput
@@ -123,7 +133,7 @@ public class CodeExecutorService {
             e.printStackTrace(); // Log the stack trace for debugging
             return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
-                    .overallStatus("INTERNAL_ERROR")
+                    .overallStatus(Status.INTERNAL_ERROR)
                     .compilationOutput(overallCompilationOutput + "\n" + "Orchestration/Docker communication failed: " + e.getMessage())
                     .testCaseOutputs(List.of())
                     .build();
