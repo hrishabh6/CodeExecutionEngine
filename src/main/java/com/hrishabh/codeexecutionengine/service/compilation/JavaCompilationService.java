@@ -9,7 +9,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
-@Service
+@Service("javaCompilationService") // Use a specific name for the bean
 public class JavaCompilationService implements CompilationService {
 
     private static final String DOCKER_IMAGE = "openjdk:17-jdk-slim";
@@ -20,20 +20,26 @@ public class JavaCompilationService implements CompilationService {
     }
 
     @Override
-    public CompilationResult compile(String submissionId, Path submissionPath, Consumer<String> logConsumer)
+    public CompilationResult compile(String submissionId, String fullyQualifiedPackageName, Path submissionPath, Consumer<String> logConsumer)
             throws IOException, InterruptedException {
 
         logConsumer.accept("COMPILE_SERVICE: Starting compilation for submission: " + submissionId);
 
+        // --- The key change is here ---
+        // Dynamically build the path to the source files from the package name
+        String packagePath = fullyQualifiedPackageName.replace('.', '/');
+
         ProcessBuilder compilePb = new ProcessBuilder(
                 "docker", "run", "--rm",
                 "-v", submissionPath.toAbsolutePath().toString() + ":/app",
-                "-w", "/app", // Working directory inside container
+                "-w", "/app", // The working directory is the root of the mount
                 DOCKER_IMAGE,
-                "javac", "-d", "/app", // Compile classes into /app, respecting package structure
-                "Main.java", "Solution.java"
+                "javac",
+                "-d", "/app", // Correctly compiles classes into /app, respecting package structure
+                packagePath + "/Main.java",    // 💡 Correct path to Main.java
+                packagePath + "/Solution.java" // 💡 Correct path to Solution.java
         );
-        compilePb.redirectErrorStream(true); // Merge stdout and stderr
+        compilePb.redirectErrorStream(true);
 
         Process compileProcess = compilePb.start();
         StringBuilder compileOutputBuilder = new StringBuilder();
@@ -41,7 +47,7 @@ public class JavaCompilationService implements CompilationService {
             String line;
             while ((line = reader.readLine()) != null) {
                 compileOutputBuilder.append(line).append("\n");
-                logConsumer.accept("COMPILE_SERVICE_LOG: " + line); // Real-time logging
+                logConsumer.accept("COMPILE_SERVICE_LOG: " + line);
             }
         }
         int compileExitCode = compileProcess.waitFor();

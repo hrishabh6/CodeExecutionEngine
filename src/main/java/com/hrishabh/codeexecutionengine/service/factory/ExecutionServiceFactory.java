@@ -1,5 +1,6 @@
 package com.hrishabh.codeexecutionengine.service.factory;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrishabh.codeexecutionengine.service.execution.ExecutionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
