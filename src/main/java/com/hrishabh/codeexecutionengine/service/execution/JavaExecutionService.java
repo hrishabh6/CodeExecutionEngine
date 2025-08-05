@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 @Service
 public class JavaExecutionService implements ExecutionService {
 
-    private static final String DOCKER_IMAGE = "openjdk:17-jdk-slim";
+    private static final String DOCKER_IMAGE = "my-java-runtime:17";
     private static final long EXECUTION_TIMEOUT_SECONDS = 10;
 
     @Override
@@ -31,20 +31,22 @@ public class JavaExecutionService implements ExecutionService {
         logConsumer.accept("EXECUTION_SERVICE: Starting execution for submission: " + submissionId);
 
         StringBuilder fullExecutionLog = new StringBuilder();
-        List<ExecutionResult.TestCaseOutput> testCaseOutputs = new ArrayList<>(); // Changed to TestCaseOutput
+        List<ExecutionResult.TestCaseOutput> testCaseOutputs = new ArrayList<>();
         boolean timedOut = false;
         int exitCode = -1;
 
         ProcessBuilder runPb = new ProcessBuilder(
                 "docker", "run", "--rm",
-                "-m", "256m", // Memory limit: 256MB
-                "--cpus", "0.5", // CPU limit: 0.5 of a CPU core
-                "-v", submissionPath.toAbsolutePath().toString() + ":/app",
-                "-w", "/app", // The classpath implicitly includes /app
+                "-m", "256m",
+                "--cpus", "0.5",
+                "-v", submissionPath.toAbsolutePath().toString() + ":/app/src", // 💡 Mount to /app/src
+                "-w", "/app",
                 DOCKER_IMAGE,
-                "java", fullyQualifiedMainClass // Execute with fully qualified class name
+                "java",
+                "-cp", "/app/src:/app/libs/*", // 💡 Classpath includes /app/src for the compiled classes
+                fullyQualifiedMainClass
         );
-        runPb.redirectErrorStream(true); // Merge stdout and stderr
+        runPb.redirectErrorStream(true);
 
         Process runProcess = runPb.start();
         logConsumer.accept("EXECUTION_SERVICE: Docker execution process started.");
@@ -53,7 +55,7 @@ public class JavaExecutionService implements ExecutionService {
             String line;
             while ((line = reader.readLine()) != null) {
                 fullExecutionLog.append(line).append("\n");
-                logConsumer.accept("EXECUTION_SERVICE_LOG: " + line); // Real-time logging
+                logConsumer.accept("EXECUTION_SERVICE_LOG: " + line);
             }
         }
 
@@ -63,15 +65,20 @@ public class JavaExecutionService implements ExecutionService {
             runProcess.destroyForcibly();
             timedOut = true;
             logConsumer.accept("EXECUTION_SERVICE: Execution timed out after " + EXECUTION_TIMEOUT_SECONDS + " seconds.");
-            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs); // Pass new list type
-            exitCode = -999; // Custom exit code for timeout
+            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs);
+            exitCode = -999;
         } else {
             exitCode = runProcess.exitValue();
             logConsumer.accept("EXECUTION_SERVICE: Execution completed with exit code: " + exitCode);
-            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs); // Pass new list type
+            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs);
         }
 
-        return new ExecutionResult(fullExecutionLog.toString(), testCaseOutputs, timedOut, exitCode);
+        return ExecutionResult.builder()
+                .rawOutput(fullExecutionLog.toString())
+                .testCaseOutputs(testCaseOutputs)
+                .timedOut(timedOut)
+                .exitCode(exitCode)
+                .build();
     }
 
     /**
@@ -81,55 +88,59 @@ public class JavaExecutionService implements ExecutionService {
      * Example SUCCESS: "TEST_CASE_RESULT: 0,3,15,"
      * Example ERROR:   "TEST_CASE_RESULT: 1,,20,ArithmeticException: / by zero"
      */
-    private void parseExecutionOutputForResults(String output, List<ExecutionResult.TestCaseOutput> results) { // Changed list type
+
+
+    private void parseExecutionOutputForResults(String output, List<ExecutionResult.TestCaseOutput> results) {
         String[] lines = output.split("\n");
         for (String line : lines) {
             if (line.startsWith("TEST_CASE_RESULT:")) {
                 String dataPart = line.substring("TEST_CASE_RESULT: ".length());
-                String[] parts = dataPart.split(",", 4); // Split into max 4 parts: index, actual, duration, error_info (the rest)
 
-                if (parts.length >= 3) { // Minimum required: index, actualOutput, duration
-                    try {
-                        int index = Integer.parseInt(parts[0].trim());
-                        String actual = parts[1].trim();
-                        long duration = Long.parseLong(parts[2].trim());
+                try {
+                    // Find the first comma to get the index
+                    int firstCommaIndex = dataPart.indexOf(',');
+                    int index = Integer.parseInt(dataPart.substring(0, firstCommaIndex).trim());
 
-                        String errorMessage = null;
-                        String errorType = null;
+                    // Find the last comma to get the duration and error info
+                    int lastCommaIndex = dataPart.lastIndexOf(',');
+                    int secondLastCommaIndex = dataPart.lastIndexOf(',', lastCommaIndex - 1);
 
-                        if (parts.length == 4) { // Error information is present
-                            String errorInfo = parts[3].trim();
-                            if (!errorInfo.isEmpty()) {
-                                int colonIndex = errorInfo.indexOf(':');
-                                if (colonIndex != -1) {
-                                    errorType = errorInfo.substring(0, colonIndex).trim();
-                                    errorMessage = errorInfo.substring(colonIndex + 1).trim();
-                                } else {
-                                    // If no colon, assume the whole thing is the error message/type
-                                    errorType = errorInfo;
-                                    errorMessage = errorInfo; // Fallback: put full info in message
-                                }
+                    // Extract the actual output part, which is between the first and second-to-last comma
+                    String actualOutput = dataPart.substring(firstCommaIndex + 1, secondLastCommaIndex).trim();
+
+                    // Extract the duration part, which is between the second and last comma
+                    String durationString = dataPart.substring(secondLastCommaIndex + 1, lastCommaIndex).trim();
+                    long duration = Long.parseLong(durationString);
+
+                    String errorMessage = null;
+                    String errorType = null;
+                    if (lastCommaIndex < dataPart.length() - 1) {
+                        // Extract the error info if it exists after the last comma
+                        String errorInfo = dataPart.substring(lastCommaIndex + 1).trim();
+                        if (!errorInfo.isEmpty()) {
+                            int colonIndex = errorInfo.indexOf(':');
+                            if (colonIndex != -1) {
+                                errorType = errorInfo.substring(0, colonIndex).trim();
+                                errorMessage = errorInfo.substring(colonIndex + 1).trim();
+                            } else {
+                                errorType = errorInfo;
+                                errorMessage = errorInfo;
                             }
                         }
-
-                        // Build the TestCaseOutput object using the builder for clarity
-                        results.add(ExecutionResult.TestCaseOutput.builder()
-                                .testCaseIndex(index)
-                                .actualOutput(actual)
-                                .executionTimeMs(duration)
-                                .errorMessage(errorMessage)
-                                .errorType(errorType)
-                                .build());
-
-                    } catch (NumberFormatException e) {
-                        System.err.println("EXECUTION_SERVICE_ERROR: Failed to parse number in test case result line: " + line + " - " + e.getMessage());
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        System.err.println("EXECUTION_SERVICE_ERROR: Malformed test case result line (too few parts): " + line + " - " + e.getMessage());
                     }
-                } else {
-                    System.err.println("EXECUTION_SERVICE_ERROR: Malformed test case result line (invalid format): " + line);
+
+                    results.add(ExecutionResult.TestCaseOutput.builder()
+                            .testCaseIndex(index)
+                            .actualOutput(actualOutput)
+                            .executionTimeMs(duration)
+                            .errorMessage(errorMessage)
+                            .errorType(errorType)
+                            .build());
+                } catch (Exception e) {
+                    System.err.println("EXECUTION_SERVICE_ERROR: Failed to parse test case result line: " + line + " - " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
         }
-    }
-}
+
+    }}

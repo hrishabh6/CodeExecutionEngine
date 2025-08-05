@@ -1,5 +1,6 @@
 package com.hrishabh.codeexecutionengine.service.compilation;
 
+import com.hrishabh.codeexecutionengine.dto.CodeSubmissionDTO;
 import com.hrishabh.codeexecutionengine.dto.CompilationResult;
 import org.springframework.stereotype.Service;
 
@@ -9,10 +10,10 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
-@Service("javaCompilationService") // Use a specific name for the bean
+@Service("javaCompilationService")
 public class JavaCompilationService implements CompilationService {
 
-    private static final String DOCKER_IMAGE = "openjdk:17-jdk-slim";
+    private static final String DOCKER_IMAGE = "my-java-runtime:17";
 
     @Override
     public String getLanguage() {
@@ -25,19 +26,18 @@ public class JavaCompilationService implements CompilationService {
 
         logConsumer.accept("COMPILE_SERVICE: Starting compilation for submission: " + submissionId);
 
-        // --- The key change is here ---
-        // Dynamically build the path to the source files from the package name
         String packagePath = fullyQualifiedPackageName.replace('.', '/');
 
         ProcessBuilder compilePb = new ProcessBuilder(
                 "docker", "run", "--rm",
-                "-v", submissionPath.toAbsolutePath().toString() + ":/app",
-                "-w", "/app", // The working directory is the root of the mount
+                "-v", submissionPath.toAbsolutePath().toString() + ":/app/src", // 💡 Mount to /app/src, not /app
+                "-w", "/app", // Working directory remains /app
                 DOCKER_IMAGE,
                 "javac",
-                "-d", "/app", // Correctly compiles classes into /app, respecting package structure
-                packagePath + "/Main.java",    // 💡 Correct path to Main.java
-                packagePath + "/Solution.java" // 💡 Correct path to Solution.java
+                "-d", "/app/src", // 💡 Output compiled classes to /app/src
+                "-cp", "/app/libs/*", // Classpath for Jackson libraries
+                "/app/src/" + packagePath + "/Main.java", // 💡 Correct path to the source file
+                "/app/src/" + packagePath + "/Solution.java" // 💡 Correct path to the source file
         );
         compilePb.redirectErrorStream(true);
 
