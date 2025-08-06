@@ -29,7 +29,6 @@ out/
 ### Secrets and Credentials ###
 # This is a very important section.
 # The `gradle.properties` file often contains sensitive information.
-gradle.properties
 
 # GPG key file. This is crucial to keep private.
 **/secring.gpg
@@ -54,3 +53,5 @@ ossrhPassword
 
 # Logs
 *.log
+
+gradle.properties

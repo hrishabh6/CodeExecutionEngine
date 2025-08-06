@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'xyz.hrishabhjoshi'
-version = '1.0.0'
+version = '1.0.1'
 
 java {
     toolchain {
@@ -35,7 +35,6 @@ dependencies {
 
     // The rest of your dependencies can remain without explicit versions
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.kafka:spring-kafka'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
@@ -57,7 +56,7 @@ mavenPublishing {
 
     pom {
         name = "Code Execution Engine"
-        description = "this project is a dynamic code execution engine designed to run user-submitted Java code in a secure and isolated environment. It's built for platforms that need to evaluate code, such as competitive programming websites, online judge systems, or educational tools."
+        description = "this project is a dynamic code execution engine designed to run user-submitted code in a secure and isolated environment. It's built for platforms that need to evaluate code, such as competitive programming websites, online judge systems, or educational tools."
         inceptionYear = "2025"
         url = "https://github.com/hrishabh6/CodeExecutionEngine/"
         licenses {
