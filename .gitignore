@@ -1,37 +1,56 @@
-HELP.md
-.gradle
+### Gradle ###
+.gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+# The `**/src/main/**/build/` and `**/src/test/**/build/` lines are redundant
+# because `build/` already covers all build output directories.
 
-### STS ###
+### IDE-specific files ###
+# Eclipse / Spring Tool Suite (STS)
 .apt_generated
 .classpath
 .factorypath
 .project
-.settings
+.settings/
 .springBeans
 .sts4-cache
 bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
 
-### IntelliJ IDEA ###
-.idea
+# IntelliJ IDEA
+.idea/
 *.iws
 *.iml
 *.ipr
 out/
-!**/src/main/**/out/
-!**/src/test/**/out/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-### VS Code ###
+# VS Code
 .vscode/
+
+### Secrets and Credentials ###
+# This is a very important section.
+# The `gradle.properties` file often contains sensitive information.
+gradle.properties
+
+# GPG key file. This is crucial to keep private.
+**/secring.gpg
+
+# Maven settings file, which can contain user tokens.
+.mvn/
+.m2/
+settings.xml
+
+# If you have a dedicated secrets or keys directory
+.keys/
+.secrets/
+
+# Other common secrets
+**/*.asc
+**/*.jks
+**/*.p12
+
+# Maven Central user tokens
+ossrhUsername
+ossrhPassword
+
+# Logs
+*.log

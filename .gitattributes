@@ -1,3 +1,7 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+# Ignore gradle properties inside the project (if any)
+gradle.properties
+
+
