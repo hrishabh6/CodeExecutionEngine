@@ -10,7 +10,14 @@ The `CodeExecutionManager` is the primary entry point for submitting and executi
 
 ### Usage
 
-To use the `CodeExecutionManager`, simply autowire it into your service or controller and call the `runCodeWithTestcases` method.
+To use the `CodeExecutionManager`,
+
+- First Pull the docker image from dockerhub by running
+```
+docker pull hrishabhjoshi/my-java-runtime:17
+```
+
+- Then simply autowire it into your service or controller and call the `runCodeWithTestcases` method.
 
 ```java
 import xyz.hrishabhjoshi.codeexecutionengine.CodeExecutionManager;
