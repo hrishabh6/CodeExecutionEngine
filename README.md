@@ -190,3 +190,6 @@ The Code Execution Engine is designed with security as a primary concern. It pro
 ---
 
 *This documentation covers the core functionality of the Code Execution Engine. For additional features or advanced configuration options, please refer to the complete API documentation.*
+
+## License
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
