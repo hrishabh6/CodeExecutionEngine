@@ -1,12 +1,11 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.4'
-    id "com.vanniktech.maven.publish" version "0.34.0"
-    id("signing")
+    id 'maven-publish'
 }
 
-group = 'xyz.hrishabhjoshi'
-version = '1.0.1'
+group = 'com.hrishabh'
+version = '0.1.1-SNAPSHOT' // Add SNAPSHOT for local dev builds
 
 java {
     toolchain {
@@ -22,11 +21,25 @@ configurations {
 
 repositories {
     mavenCentral()
+    mavenLocal() // Make sure Gradle can pull from your local Maven repo
 }
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        mavenLocal() // This tells Gradle to publish to ~/.m2/repository
+    }
+}
+
 
 dependencies {
     // Manages versions for implementation and other standard configurations
     implementation platform('org.springframework.boot:spring-boot-dependencies:3.5.4')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
 
     // Manages versions for annotation processors
     annotationProcessor platform('org.springframework.boot:spring-boot-dependencies:3.5.4')
@@ -50,35 +63,5 @@ tasks.named('test') {
 }
 
 
-
-mavenPublishing {
-    coordinates(group.toString(), name.toString(), version.toString())
-
-    pom {
-        name = "Code Execution Engine"
-        description = "this project is a dynamic code execution engine designed to run user-submitted code in a secure and isolated environment. It's built for platforms that need to evaluate code, such as competitive programming websites, online judge systems, or educational tools."
-        inceptionYear = "2025"
-        url = "https://github.com/hrishabh6/CodeExecutionEngine/"
-        licenses {
-            license {
-                name = "The Apache License, Version 2.0"
-                url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-                distribution = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-            }
-        }
-        developers {
-            developer {
-                id = "hrishabh6"
-                name = "Hrishabh Joshi"
-                url = "https://github.com/hrishabh6/"
-            }
-        }
-        scm {
-            url = "https://github.com/username/mylibrary/"
-            connection = "scm:git:git://github.com/username/mylibrary.git"
-            developerConnection = "scm:git:ssh://git@github.com/hrishabh6/CodeExecutionEngine.git"
-        }
-    }
-}
 
 
