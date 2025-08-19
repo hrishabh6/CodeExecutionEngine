@@ -64,21 +64,21 @@ public class CodeExecutionManager {
                     .compilationOutput("Error: " + e.getMessage())
                     .build();
         } finally {
-            if (tempRootPath != null && Files.exists(tempRootPath)) {
-                logConsumer.accept("Cleaning up temporary files...");
-                try (Stream<Path> walk = Files.walk(tempRootPath)) {
-                    walk.sorted(Comparator.reverseOrder())
-                            .map(Path::toFile)
-                            .forEach(file -> {
-                                if (!file.delete()) {
-                                    logConsumer.accept("Failed to delete file: " + file);
-                                }
-                            });
-                    logConsumer.accept("Cleanup complete.");
-                } catch (IOException e) {
-                    logConsumer.accept("Error during cleanup: " + e.getMessage());
-                }
-            }
+//            if (tempRootPath != null && Files.exists(tempRootPath)) {
+//                logConsumer.accept("Cleaning up temporary files...");
+//                try (Stream<Path> walk = Files.walk(tempRootPath)) {
+//                    walk.sorted(Comparator.reverseOrder())
+//                            .map(Path::toFile)
+//                            .forEach(file -> {
+//                                if (!file.delete()) {
+//                                    logConsumer.accept("Failed to delete file: " + file);
+//                                }
+//                            });
+//                    logConsumer.accept("Cleanup complete.");
+//                } catch (IOException e) {
+//                    logConsumer.accept("Error during cleanup: " + e.getMessage());
+//                }
+//            }
         }
     }
 }

@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 @Service("javaCompilationService")
 public class JavaCompilationService implements CompilationService {
 
-    private static final String DOCKER_IMAGE = "my-java-runtime:17";
+    private static final String DOCKER_IMAGE = "hrishabhjoshi/my-java-runtime:17";
 
     @Override
     public String getLanguage() {
