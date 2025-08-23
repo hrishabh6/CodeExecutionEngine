@@ -36,12 +36,19 @@ public class JavaMainClassGenerator {
                 if (!userCode.contains("class " + structureName)) {
                     mainContent.append(CustomDataStructureGenerator.generateCustomStructureClass(structureName));
                 }
+
+                mainContent.append(CustomDataStructureGenerator.generateListConverterMethods(structureName));
+
+
             }
+
+            // Add converter methods for List<CustomDataStructure> return types
         }
 
         mainContent.append("}\n");
         return mainContent.toString();
     }
+
 
     private static void appendImportsAndClassDeclaration(StringBuilder builder, QuestionMetadata metadata) {
         builder.append("package ").append(metadata.getFullyQualifiedPackageName()).append(";\n\n");
@@ -70,35 +77,89 @@ public class JavaMainClassGenerator {
         builder.append("        Solution sol = new Solution();\n");
         builder.append("        ObjectMapper mapper = new ObjectMapper();\n\n");
     }
-    private static void appendTestCaseLogic(StringBuilder builder, CodeSubmissionDTO submissionDto, QuestionMetadata metadata, String inputJson, int i) throws JsonProcessingException {
+
+    private static void appendTestCaseLogic(StringBuilder builder, CodeSubmissionDTO submissionDto,
+                                            QuestionMetadata metadata, String inputJson, int i) throws JsonProcessingException {
         builder.append("        // Test Case ").append(i).append("\n");
         builder.append("        long startTime").append(i).append(" = System.nanoTime();\n");
         builder.append("        try {\n");
 
+        // 1️⃣ Generate input variables
         InputVariableGenerator.generateInputVariableDeclarations(builder, metadata, inputJson, i);
 
+        // 2️⃣ Generate function call parameters
         String paramNames = InputVariableGenerator.generateFunctionParameters(metadata.getParameters(), i);
-        builder.append("            ").append(metadata.getReturnType()).append(" result").append(i)
+
+        // 3️⃣ Generate result assignment
+        String returnType = metadata.getReturnType();
+
+        // Determine proper variable type for test harness
+        String resultVar = "result" + i;
+
+        builder.append("            ").append(returnType).append(" ").append(resultVar)
                 .append(" = sol.").append(metadata.getFunctionName()).append("(").append(paramNames).append(");\n");
 
         builder.append("            long endTime").append(i).append(" = System.nanoTime();\n");
-        builder.append("            long duration").append(i).append(" = (endTime").append(i).append(" - startTime").append(i).append(") / 1_000_000;\n");
+        builder.append("            long duration").append(i).append(" = (endTime").append(i)
+                .append(" - startTime").append(i).append(") / 1_000_000;\n");
 
-        String returnType = metadata.getReturnType();
+        // 4️⃣ Serialize output intelligently
         if (JavaCodeHelper.isPrimitiveOrWrapper(returnType)) {
-            builder.append("            String actualOutput").append(i).append(" = String.valueOf(result").append(i).append(");\n");
-        } else if ("Node".equals(returnType)) { // New condition for Node
-            builder.append("            String actualOutput").append(i).append(" = convertNodeToAdjacencyList(result").append(i).append(");\n");
+            // primitive or boxed types
+            builder.append("            String actualOutput").append(i)
+                    .append(" = String.valueOf(").append(resultVar).append(");\n");
+        } else if (JavaCodeHelper.isArrayOfCustomDataStructure(returnType)) {
+            // e.g., ListNode[] or TreeNode[]
+            String customType = JavaCodeHelper.extractArrayElementType(returnType);
+            builder.append("            String actualOutput").append(i).append(" = convert")
+                    .append(customType).append("ListToJson(Arrays.asList(").append(resultVar).append("));\n");
+        } else if (JavaCodeHelper.isListOfCustomDataStructure(returnType)) {
+            // e.g., List<ListNode> or List<TreeNode>
+            String customType = JavaCodeHelper.extractListElementType(returnType);
+            builder.append("            String actualOutput").append(i).append(" = convert")
+                    .append(customType).append("ListToJson(").append(resultVar).append(");\n");
+        } else if (JavaCodeHelper.isCustomDataStructure(returnType)) {
+            // Single object like ListNode or TreeNode
+            builder.append("            String actualOutput").append(i).append(" = convert")
+                    .append(returnType).append("ToJson(").append(resultVar).append(");\n");
         } else {
-            builder.append("            String actualOutput").append(i).append(" = mapper.writeValueAsString(result").append(i).append(");\n");
+            // fallback: generic Object serialization
+            builder.append("            String actualOutput").append(i).append(" = mapper.writeValueAsString(")
+                    .append(resultVar).append(");\n");
         }
 
-        builder.append("            System.out.println(\"TEST_CASE_RESULT: ").append(i).append(",\" + actualOutput").append(i).append(" + \",\" + duration").append(i).append(" + \",\");\n");
+        // 5️⃣ Print test case result
+        builder.append("            System.out.println(\"TEST_CASE_RESULT: ").append(i).append(",\" + actualOutput")
+                .append(i).append(" + \",\" + duration").append(i).append(" + \",\");\n");
 
+        // 6️⃣ Catch exceptions
         builder.append("        } catch (Exception e) {\n");
         builder.append("            long endTime").append(i).append(" = System.nanoTime();\n");
-        builder.append("            long duration").append(i).append(" = (endTime").append(i).append(" - startTime").append(i).append(") / 1_000_000;\n");
-        builder.append("            System.out.println(\"TEST_CASE_RESULT: ").append(i).append(",,\" + duration").append(i).append(" + \",\" + e.getClass().getSimpleName() + \": \" + e.getMessage());\n");
+        builder.append("            long duration").append(i).append(" = (endTime").append(i).append(" - startTime")
+                .append(i).append(") / 1_000_000;\n");
+        builder.append("            System.out.println(\"TEST_CASE_RESULT: ").append(i).append(",,\" + duration")
+                .append(i).append(" + \",\" + e.getClass().getSimpleName() + \": \" + e.getMessage());\n");
         builder.append("        }\n\n");
     }
+
+
+    // Add this helper method to the JavaMainClassGenerator class
+    private static String extractCustomDataStructure(String type) {
+        if (type == null || type.trim().isEmpty()) {
+            return null;
+        }
+
+        type = type.trim();
+
+        // Pattern to match custom data structures within generic types
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(ListNode|TreeNode|Node)");
+        java.util.regex.Matcher matcher = pattern.matcher(type);
+
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return null;
+    }
+
 }
