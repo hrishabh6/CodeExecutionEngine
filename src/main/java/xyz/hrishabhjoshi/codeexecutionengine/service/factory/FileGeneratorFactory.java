@@ -14,12 +14,12 @@ public class FileGeneratorFactory {
     private final Map<String, FileGenerator> generators;
 
     @Autowired
-    public FileGeneratorFactory(@Qualifier("javaFileGenerator") FileGenerator javaFileGenerator) {
+    public FileGeneratorFactory(@Qualifier("javaFileGenerator") FileGenerator javaFileGenerator, @Qualifier("pythonFileGenerator") FileGenerator pythonFileGenerator) {
         // You would add more generators here as you implement them
         // For example: @Qualifier("pythonFileGenerator") FileGenerator pythonFileGenerator
         this.generators = Map.of(
-                "java", javaFileGenerator
-                // "python", pythonFileGenerator // Uncomment when you have a Python implementation
+                "java", javaFileGenerator,
+                 "python", pythonFileGenerator // Uncomment when you have a Python implementation
         );
     }
 
