@@ -30,6 +30,11 @@ public class PythonExecutionService implements ExecutionService {
 
         logConsumer.accept("EXECUTION_SERVICE: Starting execution for submission: " + submissionId);
 
+        // Extract the Python file path from the fullyQualifiedMainClass
+        // For Python, we need to convert the package structure to a file path
+        String pythonFilePath = constructPythonFilePath(fullyQualifiedMainClass);
+        logConsumer.accept("EXECUTION_SERVICE: Constructed Python file path: " + pythonFilePath);
+
         StringBuilder fullExecutionLog = new StringBuilder();
         List<ExecutionResult.TestCaseOutput> testCaseOutputs = new ArrayList<>();
         boolean timedOut = false;
@@ -41,7 +46,7 @@ public class PythonExecutionService implements ExecutionService {
                 "-w", "/app",
                 DOCKER_IMAGE,
                 "python3",
-                "com/algocrack/solution/q9/main.py"
+                pythonFilePath // Use the dynamically constructed path
         );
 
         runPb.redirectErrorStream(true);
@@ -77,6 +82,28 @@ public class PythonExecutionService implements ExecutionService {
                 .timedOut(timedOut)
                 .exitCode(exitCode)
                 .build();
+    }
+
+    /**
+     * Converts a Java-style fully qualified class name to a Python file path
+     * Example: "com.algocrack.solution.q9.Main" -> "com/algocrack/solution/q9/main.py"
+     */
+    private String constructPythonFilePath(String fullyQualifiedMainClass) {
+        if (fullyQualifiedMainClass == null || fullyQualifiedMainClass.trim().isEmpty()) {
+            throw new IllegalArgumentException("fullyQualifiedMainClass cannot be null or empty for Python execution");
+        }
+
+        // Remove the ".Main" suffix if present and convert to lowercase
+        String packagePath = fullyQualifiedMainClass;
+        if (packagePath.endsWith(".Main")) {
+            packagePath = packagePath.substring(0, packagePath.length() - 5); // Remove ".Main"
+        }
+
+        // Convert dots to forward slashes for file path
+        String filePath = packagePath.replace(".", "/");
+
+        // Add main.py at the end
+        return filePath + "/main.py";
     }
 
     private void parseExecutionOutputForResults(String output, List<ExecutionResult.TestCaseOutput> results) {

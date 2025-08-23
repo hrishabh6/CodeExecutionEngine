@@ -64,6 +64,7 @@ public class CodeExecutionManager {
                     .compilationOutput("Error: " + e.getMessage())
                     .build();
         } finally {
+            //commented out this part in dev enviroment
 //            if (tempRootPath != null && Files.exists(tempRootPath)) {
 //                logConsumer.accept("Cleaning up temporary files...");
 //                try (Stream<Path> walk = Files.walk(tempRootPath)) {
