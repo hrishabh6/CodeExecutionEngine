@@ -74,8 +74,8 @@ mavenPublishing {
             }
         }
         scm {
-            url = "https://github.com/username/mylibrary/"
-            connection = "scm:git:git://github.com/username/mylibrary.git"
+            url = "https://github.com/hrishabh6/CodeExecutionEngine/"
+            connection = "scm:git:git://github.com/hrishabh6/CodeExecutionEngine.git"
             developerConnection = "scm:git:ssh://git@github.com/hrishabh6/CodeExecutionEngine.git"
         }
     }
