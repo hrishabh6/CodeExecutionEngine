@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 @Service
 public class JavaExecutionService implements ExecutionService {
 
-    private static final String DOCKER_IMAGE = "my-java-runtime:17";
+    private static final String DOCKER_IMAGE = "hrishabhjoshi/my-java-runtime:17";
     private static final long EXECUTION_TIMEOUT_SECONDS = 10;
 
     @Override

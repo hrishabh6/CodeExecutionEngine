@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'xyz.hrishabhjoshi'
-version = '1.0.2'
+version = '1.0.1'
 
 java {
     toolchain {
