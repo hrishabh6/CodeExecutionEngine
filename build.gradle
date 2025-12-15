@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'xyz.hrishabhjoshi'
-version = '1.0.1'
+version = '1.0.2'
 
 java {
     toolchain {
@@ -19,6 +19,9 @@ configurations {
         extendsFrom annotationProcessor
     }
 }
+
+
+
 
 repositories {
     mavenCentral()
@@ -79,6 +82,11 @@ mavenPublishing {
             developerConnection = "scm:git:ssh://git@github.com/hrishabh6/CodeExecutionEngine.git"
         }
     }
+}
+signing {
+    useGpgCmd()  // use GPG CLI
+    // sign all Maven publications
+    sign publishing.publications
 }
 
 
