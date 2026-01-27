@@ -10,12 +10,20 @@ import java.util.Map;
 public class JavaMainClassGenerator {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final java.util.Set<String> KNOWN_CUSTOM_DS = java.util.Set.of("ListNode", "TreeNode", "Node");
 
     public static String generateMainClassContent(CodeSubmissionDTO submissionDto) throws JsonProcessingException {
         QuestionMetadata metadata = submissionDto.getQuestionMetadata();
         StringBuilder mainContent = new StringBuilder();
 
-        appendImportsAndClassDeclaration(mainContent, metadata);
+        // Auto-detect custom data structures if not explicitly provided
+        Map<String, String> customDS = metadata.getCustomDataStructureNames();
+        if (customDS == null || customDS.isEmpty()) {
+            customDS = detectCustomDataStructures(metadata);
+            System.out.println("LOGGING: [JavaMainClassGen] Auto-detected custom DS: " + customDS);
+        }
+
+        appendImportsAndClassDeclaration(mainContent, metadata, customDS);
         appendMainMethodHeader(mainContent);
 
         for (int i = 0; i < submissionDto.getTestCases().size(); i++) {
@@ -26,45 +34,66 @@ public class JavaMainClassGenerator {
 
         mainContent.append("    }\n");
 
-        if (metadata.getCustomDataStructureNames() != null) {
-            String userCode = submissionDto.getUserSolutionCode();
-            for (Map.Entry<String, String> entry : metadata.getCustomDataStructureNames().entrySet()) {
+        // Generate custom data structure helpers using detected DS
+        // NOTE: We do NOT generate the class here - Solution.java has it
+        if (customDS != null && !customDS.isEmpty()) {
+            for (Map.Entry<String, String> entry : customDS.entrySet()) {
                 String structureName = entry.getValue();
 
+                // Only generate helper methods and converters - NOT the class itself
                 mainContent.append(CustomDataStructureGenerator.generateCustomStructureHelper(structureName));
-
-                if (!userCode.contains("class " + structureName)) {
-                    mainContent.append(CustomDataStructureGenerator.generateCustomStructureClass(structureName));
-                }
-
                 mainContent.append(CustomDataStructureGenerator.generateListConverterMethods(structureName));
-
-
             }
-
-            // Add converter methods for List<CustomDataStructure> return types
         }
 
         mainContent.append("}\n");
         return mainContent.toString();
     }
 
+    /**
+     * Auto-detect custom data structures from parameter types and return type.
+     */
+    private static Map<String, String> detectCustomDataStructures(QuestionMetadata metadata) {
+        Map<String, String> detected = new java.util.HashMap<>();
+        
+        // Check return type
+        if (metadata.getReturnType() != null) {
+            for (String ds : KNOWN_CUSTOM_DS) {
+                if (metadata.getReturnType().contains(ds)) {
+                    detected.put(ds, ds);
+                }
+            }
+        }
+        
+        // Check parameter types
+        if (metadata.getParameters() != null) {
+            for (var param : metadata.getParameters()) {
+                if (param.getType() != null) {
+                    for (String ds : KNOWN_CUSTOM_DS) {
+                        if (param.getType().contains(ds)) {
+                            detected.put(ds, ds);
+                        }
+                    }
+                }
+            }
+        }
+        
+        return detected;
+    }
 
-    private static void appendImportsAndClassDeclaration(StringBuilder builder, QuestionMetadata metadata) {
+    private static void appendImportsAndClassDeclaration(StringBuilder builder, QuestionMetadata metadata, Map<String, String> customDS) {
         builder.append("package ").append(metadata.getFullyQualifiedPackageName()).append(";\n\n");
         builder.append("import java.util.*;\n");
         builder.append("import java.util.stream.*;\n");
-        builder.append("import java.util.Queue;\n"); // New import
-        builder.append("import java.util.LinkedList;\n"); // New import
+        builder.append("import java.util.Queue;\n");
+        builder.append("import java.util.LinkedList;\n");
         builder.append("import com.fasterxml.jackson.databind.ObjectMapper;\n");
-        builder.append("import com.fasterxml.jackson.core.JsonProcessingException;\n"); // **This is the fixed line**
+        builder.append("import com.fasterxml.jackson.core.JsonProcessingException;\n");
 
 
-        if (metadata.getCustomDataStructureNames() != null) {
-            if (metadata.getCustomDataStructureNames().containsKey("ListNode") || metadata.getCustomDataStructureNames().containsKey("TreeNode") || metadata.getCustomDataStructureNames().containsKey("Node")) {
+        if (customDS != null && !customDS.isEmpty()) {
+            if (customDS.containsKey("ListNode") || customDS.containsKey("TreeNode") || customDS.containsKey("Node")) {
                 builder.append("import com.fasterxml.jackson.annotation.JsonProperty;\n");
-                builder.append("import com.fasterxml.jackson.databind.ObjectMapper;\n");
-
             }
         }
 
@@ -104,8 +133,12 @@ public class JavaMainClassGenerator {
                 .append(" - startTime").append(i).append(") / 1_000_000;\n");
 
         // 4️⃣ Serialize output intelligently
-        if (JavaCodeHelper.isPrimitiveOrWrapper(returnType)) {
-            // primitive or boxed types
+        if (JavaCodeHelper.isPrimitiveArray(returnType)) {
+            // Primitive arrays (int[], double[], etc.) - use Arrays.toString() for readable output
+            builder.append("            String actualOutput").append(i)
+                    .append(" = java.util.Arrays.toString(").append(resultVar).append(");\n");
+        } else if (JavaCodeHelper.isPrimitiveOrWrapper(returnType)) {
+            // primitive or boxed types (int, Integer, String, etc.)
             builder.append("            String actualOutput").append(i)
                     .append(" = String.valueOf(").append(resultVar).append(");\n");
         } else if (JavaCodeHelper.isArrayOfCustomDataStructure(returnType)) {
@@ -123,7 +156,7 @@ public class JavaMainClassGenerator {
             builder.append("            String actualOutput").append(i).append(" = convert")
                     .append(returnType).append("ToJson(").append(resultVar).append(");\n");
         } else {
-            // fallback: generic Object serialization
+            // fallback: generic Object serialization (Lists, Maps, etc.)
             builder.append("            String actualOutput").append(i).append(" = mapper.writeValueAsString(")
                     .append(resultVar).append(");\n");
         }

@@ -1,12 +1,11 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.4'
-    id "com.vanniktech.maven.publish" version "0.34.0"
-    id("signing")
+    id 'org.flywaydb.flyway' version '10.10.0'
 }
 
 group = 'xyz.hrishabhjoshi'
-version = '1.0.2'
+version = '2.0.0'
 
 java {
     toolchain {
@@ -19,9 +18,6 @@ configurations {
         extendsFrom annotationProcessor
     }
 }
-
-
-
 
 repositories {
     mavenCentral()
@@ -36,15 +32,34 @@ dependencies {
 
     developmentOnly platform('org.springframework.boot:spring-boot-dependencies:3.5.4')
 
-    // The rest of your dependencies can remain without explicit versions
+    // Spring Boot Starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Monitoring
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Database
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+
+    // JSON Processing
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Lombok
     compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Dev Tools
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-    annotationProcessor 'org.projectlombok:lombok'
+
+    // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.kafka:spring-kafka-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -52,41 +67,10 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-
-
-mavenPublishing {
-    coordinates(group.toString(), name.toString(), version.toString())
-
-    pom {
-        name = "Code Execution Engine"
-        description = "this project is a dynamic code execution engine designed to run user-submitted code in a secure and isolated environment. It's built for platforms that need to evaluate code, such as competitive programming websites, online judge systems, or educational tools."
-        inceptionYear = "2025"
-        url = "https://github.com/hrishabh6/CodeExecutionEngine/"
-        licenses {
-            license {
-                name = "The Apache License, Version 2.0"
-                url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-                distribution = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-            }
-        }
-        developers {
-            developer {
-                id = "hrishabh6"
-                name = "Hrishabh Joshi"
-                url = "https://github.com/hrishabh6/"
-            }
-        }
-        scm {
-            url = "https://github.com/hrishabh6/CodeExecutionEngine/"
-            connection = "scm:git:git://github.com/hrishabh6/CodeExecutionEngine.git"
-            developerConnection = "scm:git:ssh://git@github.com/hrishabh6/CodeExecutionEngine.git"
-        }
-    }
-}
-signing {
-    useGpgCmd()  // use GPG CLI
-    // sign all Maven publications
-    sign publishing.publications
+flyway {
+    url = 'jdbc:mysql://localhost:3306/leetcode'
+    user = 'root'
+    password = System.getenv('DB_PASSWORD') ?: 'hrishabh@123'
 }
 
 

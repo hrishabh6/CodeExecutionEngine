@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  *   <li>Parsing execution results from the Python output</li>
  *   <li>Handling timeouts and error conditions</li>
  * </ul>
- * </p>
+ *  
  *
  * @author Hrishabhj Joshi
  * @version 1.0
@@ -40,18 +40,16 @@ public class PythonExecutionService implements ExecutionService {
     public String getLanguage() {
         return "python";
     }
-
     /**
      * Executes Python code in a Docker container and returns the execution results.
      *
-     * <p>The method performs the following operations:
+     * <p>The method performs the following operations: 
      * <ul>
      *   <li>Constructs the Python file path from the fully qualified class name</li>
      *   <li>Creates and runs a Docker container with the submission code</li>
      *   <li>Monitors execution with timeout handling</li>
      *   <li>Parses the output to extract test case results</li>
      * </ul>
-     * </p>
      *
      * @param submissionId The unique identifier for this submission
      * @param submissionPath The path to the submission files on the host system
@@ -61,6 +59,7 @@ public class PythonExecutionService implements ExecutionService {
      * @throws IOException if file I/O operations fail
      * @throws InterruptedException if the execution process is interrupted
      */
+
     @Override
     public ExecutionResult run(String submissionId, Path submissionPath, String fullyQualifiedMainClass, Consumer<String> logConsumer)
             throws IOException, InterruptedException {
@@ -123,9 +122,9 @@ public class PythonExecutionService implements ExecutionService {
      * Converts a Java-style fully qualified class name to a Python file path.
      *
      * <p>This method transforms package notation used in Java to the corresponding
-     * file system path structure expected by Python modules.</p>
+     * file system path structure expected by Python modules. 
      *
-     * <p>Examples:</p>
+     * <p>Examples: 
      * <ul>
      *   <li>"com.algocrack.solution.q9.Main" → "com/algocrack/solution/q9/main.py"</li>
      *   <li>"org.example.test.q1.Main" → "org/example/test/q1/main.py"</li>
@@ -153,10 +152,10 @@ public class PythonExecutionService implements ExecutionService {
      * Parses the raw execution output to extract structured test case results.
      *
      * <p>This method looks for specially formatted output lines that contain
-     * test case results in the format:</p>
+     * test case results in the format: 
      * <pre>TEST_CASE_RESULT: &lt;index&gt;,&lt;output&gt;,&lt;duration&gt;,&lt;error_info&gt;</pre>
      *
-     * <p>The parsing handles:</p>
+     * <p>The parsing handles: 
      * <ul>
      *   <li>Successful test case executions with JSON output</li>
      *   <li>Error conditions with exception details</li>

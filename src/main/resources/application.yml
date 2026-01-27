@@ -1,0 +1,75 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: code-execution-service
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/leetcode
+    username: root
+    password: ${DB_PASSWORD:hrishabh@123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 5000ms
+  
+  # Flyway Configuration
+  flyway:
+    enabled: false
+
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,info
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  endpoint:
+    health:
+      show-details: always
+
+# Execution Service Configuration
+execution:
+  worker:
+    count: ${WORKER_COUNT:5}
+    timeout-seconds: 10
+    poll-timeout-seconds: 5
+  queue:
+    name: execution:queue
+    status-prefix: "execution:status"
+    status-ttl-seconds: 3600
+  docker:
+    java-image: hrishabhjoshi/my-java-runtime:17
+    python-image: hrishabhjoshi/python-runtime:3.9
+    memory-limit: 256m
+    cpu-limit: 0.5
+
+# Logging
+logging:
+  level:
+    xyz.hrishabhjoshi.codeexecutionengine: INFO
+    org.springframework.data.redis: DEBUG

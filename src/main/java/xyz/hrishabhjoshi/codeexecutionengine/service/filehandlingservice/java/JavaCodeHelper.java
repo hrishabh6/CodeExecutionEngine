@@ -5,15 +5,30 @@ import java.util.Set;
 public class JavaCodeHelper {
 
     private static final Set<String> PRIMITIVE_TYPES = Set.of(
-            "int", "Integer", "double", "Double", "boolean", "Boolean", "String"
-    );
+            "int", "Integer", "long", "Long", "double", "Double",
+            "float", "Float", "boolean", "Boolean", "char", "Character",
+            "byte", "Byte", "short", "Short", "String");
+
+    private static final Set<String> PRIMITIVE_ARRAY_TYPES = Set.of(
+            "int[]", "long[]", "double[]", "float[]", "boolean[]",
+            "char[]", "byte[]", "short[]", "Integer[]", "Long[]",
+            "Double[]", "Float[]", "Boolean[]", "String[]");
+
+    /**
+     * Check if type is a primitive array that needs Arrays.toString()
+     * serialization.
+     */
+    public static boolean isPrimitiveArray(String type) {
+        return PRIMITIVE_ARRAY_TYPES.contains(type);
+    }
 
     public static boolean isPrimitiveOrWrapper(String type) {
         return PRIMITIVE_TYPES.contains(type) ||
                 type.startsWith("List<Integer>") ||
                 type.startsWith("List<String>") ||
-                type.startsWith("List<List<") ||
-                type.endsWith("[]");
+                type.startsWith("List<List<");
+        // Note: removed "endsWith([])" - arrays handled separately by
+        // isPrimitiveArray()
     }
 
     public static boolean isCustomDataStructure(String type) {
