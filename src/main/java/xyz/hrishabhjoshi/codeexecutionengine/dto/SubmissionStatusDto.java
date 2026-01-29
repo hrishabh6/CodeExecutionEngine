@@ -87,7 +87,10 @@ public class SubmissionStatusDto {
         private String actualOutput;
         private String expectedOutput;
         private Long executionTimeMs;
+        private Long memoryBytes;
         private String error;
         private String errorType;
+        private Boolean isCustom;
+
     }
 }

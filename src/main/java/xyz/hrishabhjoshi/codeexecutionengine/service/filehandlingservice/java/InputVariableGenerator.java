@@ -5,26 +5,28 @@ import xyz.hrishabhjoshi.codeexecutionengine.dto.ParamInfoDTO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+@Slf4j
 public class InputVariableGenerator {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static void generateInputVariableDeclarations(StringBuilder builder, QuestionMetadata metadata, String inputJson, int testCaseIndex) throws JsonProcessingException {
-        System.out.println("LOGGING: [InputVarGen] Generating variables for testCase " + testCaseIndex);
-        System.out.println("LOGGING: [InputVarGen] inputJson = " + inputJson);
-        
+        log.debug("[InputVarGen] Generating variables for testCase {}", testCaseIndex);
+        log.debug("[InputVarGen] inputJson = {}", inputJson);
+
         JsonNode inputNode = objectMapper.readTree(inputJson);
         List<ParamInfoDTO> parameters = metadata.getParameters();
-        
-        System.out.println("LOGGING: [InputVarGen] inputNode.isObject() = " + inputNode.isObject());
-        System.out.println("LOGGING: [InputVarGen] parameters count = " + (parameters != null ? parameters.size() : 0));
+
+        log.debug("[InputVarGen] inputNode.isObject() = {}", inputNode.isObject());
+        log.debug("[InputVarGen] parameters count = {}", (parameters != null ? parameters.size() : 0));
 
         if (inputNode.isObject()) {
             if (parameters == null || parameters.isEmpty()) {
-                System.out.println("LOGGING: [InputVarGen] ERROR: No parameters in metadata!");
+                log.error("[InputVarGen] ERROR: No parameters in metadata!");
                 return;
             }
             for (ParamInfoDTO param : parameters) {
@@ -32,20 +34,20 @@ public class InputVariableGenerator {
                 String paramName = param.getName();
                 JsonNode paramValueNode = inputNode.get(paramName);
 
-                System.out.println("LOGGING: [InputVarGen] Looking for param: " + paramName + " (type: " + paramType + ")");
-                System.out.println("LOGGING: [InputVarGen] Found value: " + (paramValueNode != null ? paramValueNode.toString() : "NULL"));
+                log.debug("[InputVarGen] Looking for param: {} (type: {})", paramName, paramType);
+                log.debug("[InputVarGen] Found value: {}", (paramValueNode != null ? paramValueNode.toString() : "NULL"));
 
                 if (paramValueNode != null) {
                     String declarationValue = ValueDeclarationGenerator.generateValueDeclaration(paramType, paramValueNode, metadata.getCustomDataStructureNames());
                     builder.append("            ").append(paramType).append(" ").append(paramName).append(testCaseIndex)
                             .append(" = ").append(declarationValue).append(";\n");
-                    System.out.println("LOGGING: [InputVarGen] Generated: " + paramType + " " + paramName + testCaseIndex);
+                    log.debug("[InputVarGen] Generated: {} {}{}", paramType, paramName, testCaseIndex);
                 } else {
-                    System.out.println("LOGGING: [InputVarGen] WARNING: paramValueNode is NULL for " + paramName);
+                    log.warn("[InputVarGen] WARNING: paramValueNode is NULL for {}", paramName);
                 }
             }
         } else {
-            System.out.println("LOGGING: [InputVarGen] ERROR: inputNode is NOT an object! Actual type: " + inputNode.getNodeType());
+            log.error("[InputVarGen] ERROR: inputNode is NOT an object! Actual type: {}", inputNode.getNodeType());
         }
     }
 

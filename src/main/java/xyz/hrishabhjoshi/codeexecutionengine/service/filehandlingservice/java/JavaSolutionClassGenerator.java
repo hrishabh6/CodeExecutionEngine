@@ -3,10 +3,12 @@ package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.java;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO.QuestionMetadata;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ParamInfoDTO;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
 import java.util.Set;
 
+@Slf4j
 public class JavaSolutionClassGenerator {
 
     private static final Set<String> KNOWN_CUSTOM_DS = Set.of("ListNode", "TreeNode", "Node");
@@ -20,7 +22,7 @@ public class JavaSolutionClassGenerator {
         // Auto-detect required custom data structures
         Set<String> requiredDS = detectRequiredDataStructures(metadata);
         String userCode = submissionDto.getUserSolutionCode();
-        
+
         // Extract imports from user code
         StringBuilder userImports = new StringBuilder();
         StringBuilder userCodeWithoutImports = new StringBuilder();
@@ -31,12 +33,12 @@ public class JavaSolutionClassGenerator {
                 userCodeWithoutImports.append(line).append("\n");
             }
         }
-        
+
         // Add standard imports for custom DS
         if (!requiredDS.isEmpty()) {
             content.append("import java.util.*;\n");
         }
-        
+
         // Add user's imports
         if (userImports.length() > 0) {
             content.append(userImports);
@@ -46,7 +48,7 @@ public class JavaSolutionClassGenerator {
         // Add custom DS class definitions if not in user code
         for (String ds : requiredDS) {
             if (!userCode.contains("class " + ds)) {
-                System.out.println("LOGGING: [SolutionGen] Adding " + ds + " class to Solution.java");
+                log.debug("[SolutionGen] Adding {} class to Solution.java", ds);
                 content.append(generateCustomDSClass(ds));
                 content.append("\n");
             }

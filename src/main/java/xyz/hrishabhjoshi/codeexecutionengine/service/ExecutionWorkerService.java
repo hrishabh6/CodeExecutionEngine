@@ -1,6 +1,6 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,11 +11,14 @@ import xyz.hrishabhjoshi.codeexecutionengine.CodeExecutionManager;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
 import xyz.hrishabhjoshi.codeexecutionengine.model.*;
 import xyz.hrishabhjoshi.codeexecutionengine.repository.ExecutionMetricsRepository;
+import xyz.hrishabhjoshi.codeexecutionengine.service.utils.MemoryParser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
 
 /**
  * Worker service that processes submissions from the queue.
@@ -119,13 +122,13 @@ public class ExecutionWorkerService {
 
             long executionTime = System.currentTimeMillis() - startTime;
 
-            // Determine verdict based on execution result
-            SubmissionVerdict verdict = determineVerdict(result);
+            // Determine verdict based on execution result (only official test cases)
+            SubmissionVerdict verdict = determineVerdict(result, codeSubmission);
             log.info("[WORKER] {} determined verdict={} in {}ms", workerId, verdict, executionTime);
 
             // Build test case results
             List<SubmissionStatusDto.TestCaseResult> testCaseResults = 
-                buildTestCaseResults(result.getTestCaseOutputs());
+                buildTestCaseResults(result.getTestCaseOutputs(), codeSubmission);
 
             // Update final status (Redis only)
             log.info("[WORKER] {} updating final status to COMPLETED in Redis", workerId);
@@ -171,12 +174,31 @@ public class ExecutionWorkerService {
                     .build();
         }
 
+        // Merge official + custom test cases
+        List<Map<String, Object>> allTestCases = new ArrayList<>();
+        if (request.getTestCases() != null) {
+            // Add official test cases with isCustom = false
+            for (Map<String, Object> tc : request.getTestCases()) {
+                Map<String, Object> tcWithFlag = new java.util.HashMap<>(tc);
+                tcWithFlag.put("isCustom", false);
+                allTestCases.add(tcWithFlag);
+            }
+        }
+        if (request.getCustomTestCases() != null) {
+            // Add custom test cases with isCustom = true
+            for (Map<String, Object> tc : request.getCustomTestCases()) {
+                Map<String, Object> tcWithFlag = new java.util.HashMap<>(tc);
+                tcWithFlag.put("isCustom", true);
+                allTestCases.add(tcWithFlag);
+            }
+        }
+
         return CodeSubmissionDTO.builder()
                 .submissionId(request.getSubmissionId())
                 .language(request.getLanguage())
                 .userSolutionCode(request.getCode())
                 .questionMetadata(questionMeta)
-                .testCases(request.getTestCases())
+                .testCases(allTestCases)
                 .build();
     }
 
@@ -184,15 +206,22 @@ public class ExecutionWorkerService {
      * Determine verdict from execution result.
      * NOTE: This is a preliminary verdict based on execution status.
      * SubmissionService will do the final output comparison.
+     * Only considers OFFICIAL test cases (ignores custom test cases).
      */
-    private SubmissionVerdict determineVerdict(CodeExecutionResultDTO result) {
+    private SubmissionVerdict determineVerdict(CodeExecutionResultDTO result, CodeSubmissionDTO submission) {
         return switch (result.getOverallStatus()) {
             case SUCCESS -> {
-                // Check if any test case has errors
-                boolean hasErrors = result.getTestCaseOutputs() != null &&
+                // Check if any OFFICIAL test case has errors (ignore custom test cases)
+                boolean hasOfficialErrors = result.getTestCaseOutputs() != null &&
                         result.getTestCaseOutputs().stream()
+                                .filter(tc -> {
+                                    // Get the isCustom flag from the test case
+                                    Map<String, Object> testCase = submission.getTestCases().get(tc.getTestCaseIndex());
+                                    Boolean isCustom = (Boolean) testCase.get("isCustom");
+                                    return isCustom == null || !isCustom; // Only check official test cases
+                                })
                                 .anyMatch(tc -> tc.getErrorMessage() != null);
-                yield hasErrors ? SubmissionVerdict.RUNTIME_ERROR : SubmissionVerdict.ACCEPTED;
+                yield hasOfficialErrors ? SubmissionVerdict.RUNTIME_ERROR : SubmissionVerdict.ACCEPTED;
             }
             case COMPILATON_ERROR -> SubmissionVerdict.COMPILATION_ERROR;
             case TIMEOUT -> SubmissionVerdict.TIME_LIMIT_EXCEEDED;
@@ -205,18 +234,26 @@ public class ExecutionWorkerService {
      * Build test case results for status DTO.
      */
     private List<SubmissionStatusDto.TestCaseResult> buildTestCaseResults(
-            List<CodeExecutionResultDTO.TestCaseOutput> outputs) {
+            List<CodeExecutionResultDTO.TestCaseOutput> outputs, CodeSubmissionDTO submission) {
         if (outputs == null) return new ArrayList<>();
         
         return outputs.stream()
-                .map(tc -> SubmissionStatusDto.TestCaseResult.builder()
-                        .index(tc.getTestCaseIndex())
-                        .passed(tc.getErrorMessage() == null)
-                        .actualOutput(tc.getActualOutput())
-                        .executionTimeMs(tc.getExecutionTimeMs())
-                        .error(tc.getErrorMessage())
-                        .errorType(tc.getErrorType())
-                        .build())
+                .map(tc -> {
+                    // Get the isCustom flag from the test case
+                    Map<String, Object> testCase = submission.getTestCases().get(tc.getTestCaseIndex());
+                    Boolean isCustom = (Boolean) testCase.get("isCustom");
+                    
+                    return SubmissionStatusDto.TestCaseResult.builder()
+                            .index(tc.getTestCaseIndex())
+                            .passed(tc.getErrorMessage() == null)
+                            .actualOutput(tc.getActualOutput())
+                            .executionTimeMs(tc.getExecutionTimeMs())
+                            .memoryBytes(tc.getMemoryBytes())
+                            .error(tc.getErrorMessage())
+                            .errorType(tc.getErrorType())
+                            .isCustom(isCustom != null ? isCustom : false)
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 
@@ -247,11 +284,28 @@ public class ExecutionWorkerService {
                                    CodeExecutionResultDTO result,
                                    List<SubmissionStatusDto.TestCaseResult> testCaseResults,
                                    int runtimeMs, String workerId) {
+        
+        // Calculate max memory across all test cases
+        Integer maxMemoryKb = null;
+        if (result.getTestCaseOutputs() != null) {
+            Long maxBytes = result.getTestCaseOutputs().stream()
+                    .map(CodeExecutionResultDTO.TestCaseOutput::getMemoryBytes)
+                    .filter(mem -> mem != null)
+                    .mapToLong(Long::longValue)
+                    .max()
+                    .orElse(0L);
+            
+            if (maxBytes > 0) {
+                maxMemoryKb = MemoryParser.bytesToKB(maxBytes);
+            }
+        }
+        
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
                 .status("COMPLETED")
                 .verdict(verdict.name())
                 .runtimeMs(runtimeMs)
+                .memoryKb(maxMemoryKb)
                 .compilationOutput(result.getCompilationOutput())
                 .testCaseResults(testCaseResults)
                 .completedAt(System.currentTimeMillis())

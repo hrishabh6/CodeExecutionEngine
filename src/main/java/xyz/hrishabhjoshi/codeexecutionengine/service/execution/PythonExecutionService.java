@@ -2,6 +2,7 @@ package xyz.hrishabhjoshi.codeexecutionengine.service.execution;
 
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ExecutionResult;
+import xyz.hrishabhjoshi.codeexecutionengine.service.utils.MemoryParser;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -73,9 +74,15 @@ public class PythonExecutionService implements ExecutionService {
         List<ExecutionResult.TestCaseOutput> testCaseOutputs = new ArrayList<>();
         boolean timedOut = false;
         int exitCode = -1;
+        Long memoryBytes = null;
+
+        // Generate unique container name for memory tracking
+        String containerName = "exec-" + submissionId + "-" + System.currentTimeMillis();
+        logConsumer.accept("MEMORY_CONTAINER: " + containerName);
 
         ProcessBuilder runPb = new ProcessBuilder(
-                "docker", "run", "--rm",
+                "docker", "run",
+                "--name", containerName,  // Named container for stats tracking
                 "-v", submissionPath.toAbsolutePath().toString() + ":/app",
                 "-w", "/app",
                 DOCKER_IMAGE,
@@ -87,6 +94,35 @@ public class PythonExecutionService implements ExecutionService {
 
         Process runProcess = runPb.start();
         logConsumer.accept("EXECUTION_SERVICE: Docker execution process started.");
+
+        // Start a thread to capture memory stats while container is running
+        final Long[] capturedMemory = {null};
+        final int[] attemptCount = {0};
+        Thread statsThread = new Thread(() -> {
+            try {
+                logConsumer.accept("MEMORY_THREAD: Starting stats collection for container: " + containerName);
+                // Wait a bit for container to actually start
+                Thread.sleep(500);
+                // Capture memory every 500ms while container runs
+                for (int i = 0; i < 20; i++) { // Max 10 seconds
+                    attemptCount[0]++;
+                    Long mem = getContainerMemoryUsage(containerName, logConsumer);
+                    if (mem != null && (capturedMemory[0] == null || mem > capturedMemory[0])) {
+                        capturedMemory[0] = mem; // Keep peak memory
+                        logConsumer.accept("MEMORY_THREAD: Captured peak memory: " + mem + " bytes (attempt " + attemptCount[0] + ")");
+                    }
+                    Thread.sleep(500);
+                }
+                logConsumer.accept("MEMORY_THREAD: Completed " + attemptCount[0] + " attempts, peak memory: " + capturedMemory[0]);
+            } catch (InterruptedException e) {
+                logConsumer.accept("MEMORY_THREAD: Interrupted after " + attemptCount[0] + " attempts");
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                logConsumer.accept("MEMORY_THREAD: Error: " + e.getMessage());
+            }
+        });
+        statsThread.setDaemon(true);
+        statsThread.start();
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(runProcess.getInputStream()))) {
             String line;
@@ -102,12 +138,35 @@ public class PythonExecutionService implements ExecutionService {
             runProcess.destroyForcibly();
             timedOut = true;
             logConsumer.accept("EXECUTION_SERVICE: Execution timed out after " + EXECUTION_TIMEOUT_SECONDS + " seconds.");
-            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs);
+            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs, capturedMemory[0]);
             exitCode = -999;
         } else {
             exitCode = runProcess.exitValue();
             logConsumer.accept("EXECUTION_SERVICE: Execution completed with exit code: " + exitCode);
-            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs);
+
+            // Use captured memory from stats thread
+            memoryBytes = capturedMemory[0];
+
+            if (memoryBytes != null) {
+                logConsumer.accept("MEMORY_CAPTURED: Peak memory usage: " + memoryBytes + " bytes (" + MemoryParser.bytesToKB(memoryBytes) + " KB)");
+            } else {
+                // Fallback if stats not captured (use reasonable default for Python)
+                memoryBytes = 128L * 1024L * 1024L; // 128 MB in bytes
+                logConsumer.accept("MEMORY_FALLBACK: No memory captured, using default estimate as fallback: " + memoryBytes + " bytes");
+            }
+
+            parseExecutionOutputForResults(fullExecutionLog.toString(), testCaseOutputs, memoryBytes);
+        }
+
+        // Stop stats thread
+        statsThread.interrupt();
+
+        // Clean up container
+        // Clean up container
+        try {
+            cleanupContainer(containerName, logConsumer);
+        } catch (Exception e) {
+            logConsumer.accept("CLEANUP_ERROR: " + e.getMessage());
         }
 
         return ExecutionResult.builder()
@@ -116,6 +175,65 @@ public class PythonExecutionService implements ExecutionService {
                 .timedOut(timedOut)
                 .exitCode(exitCode)
                 .build();
+    }
+
+    /**
+     * Get memory usage from Docker stats.
+     * 
+     * @param containerName Name of the container
+     * @param logConsumer Logger
+     * @return Peak memory in bytes, or null if failed
+     */
+    private Long getContainerMemoryUsage(String containerName, Consumer<String> logConsumer) {
+        try {
+            ProcessBuilder statsPb = new ProcessBuilder(
+                "docker", "stats", "--no-stream", 
+                "--format", "{{.MemUsage}}", 
+                containerName
+            );
+            
+            Process statsProcess = statsPb.start();
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(statsProcess.getInputStream()))) {
+                String memoryStats = reader.readLine();
+                
+                if (memoryStats != null && !memoryStats.trim().isEmpty()) {
+                    logConsumer.accept("MEMORY_STATS: " + memoryStats);
+                    Long bytes = MemoryParser.parseMemoryToBytes(memoryStats);
+                    if (bytes != null) {
+                        logConsumer.accept("MEMORY_PARSED: " + bytes + " bytes (" + MemoryParser.bytesToKB(bytes) + " KB)");
+                    }
+                    return bytes;
+                }
+            }
+            
+            statsProcess.waitFor(2, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            logConsumer.accept("MEMORY_TRACKING_ERROR: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Clean up Docker container.
+     * 
+     * @param containerName Name of the container to remove
+     * @param logConsumer Logger
+     */
+    private void cleanupContainer(String containerName, Consumer<String> logConsumer) {
+        try {
+            ProcessBuilder rmPb = new ProcessBuilder("docker", "rm", "-f", containerName);
+            Process rmProcess = rmPb.start();
+            boolean removed = rmProcess.waitFor(5, TimeUnit.SECONDS);
+            if (removed) {
+                logConsumer.accept("CLEANUP: Removed container " + containerName);
+            } else {
+                logConsumer.accept("CLEANUP_WARNING: Container removal timed out for " + containerName);
+            }
+        } catch (Exception e) {
+            logConsumer.accept("CLEANUP_ERROR: " + e.getMessage());
+        }
     }
 
     /**
@@ -166,7 +284,7 @@ public class PythonExecutionService implements ExecutionService {
      * @param output The raw execution output from the Python process
      * @param results The list to populate with parsed test case results
      */
-    private void parseExecutionOutputForResults(String output, List<ExecutionResult.TestCaseOutput> results) {
+    private void parseExecutionOutputForResults(String output, List<ExecutionResult.TestCaseOutput> results, Long memoryBytes) {
         String[] lines = output.split("\n");
         for (String line : lines) {
             if (line.startsWith("TEST_CASE_RESULT:")) {
@@ -229,6 +347,7 @@ public class PythonExecutionService implements ExecutionService {
                             .executionTimeMs(duration)
                             .errorMessage(errorMessage)
                             .errorType(errorType)
+                            .memoryBytes(memoryBytes)
                             .build());
 
                 } catch (Exception e) {

@@ -49,6 +49,11 @@ public class ExecutionRequest {
     private List<Map<String, Object>> testCases;
 
     /**
+     * Custom test cases provided by user (optional)
+     */
+    private List<Map<String, Object>> customTestCases;
+
+    /**
      * Client IP address (set by server)
      */
     private String ipAddress;

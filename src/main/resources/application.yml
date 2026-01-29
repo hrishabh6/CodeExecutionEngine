@@ -71,5 +71,5 @@ execution:
 # Logging
 logging:
   level:
-    xyz.hrishabhjoshi.codeexecutionengine: INFO
+    xyz.hrishabhjoshi.codeexecutionengine: DEBUG
     org.springframework.data.redis: DEBUG

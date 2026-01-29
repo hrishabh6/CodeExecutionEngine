@@ -33,7 +33,6 @@ public class CodeExecutorService {
     }
 
     public CodeExecutionResultDTO executeCode(
-            // 💡 Add the CodeSubmissionDTO argument back to this method
             CodeSubmissionDTO submissionDto,
             String submissionId,
             Path submissionRootPath,
@@ -60,13 +59,11 @@ public class CodeExecutorService {
 
         try {
             // --- Step 1: Compile Code ---
-            // 💡 Get the package name from the DTO
             String fullyQualifiedPackageName = submissionDto.getQuestionMetadata().getFullyQualifiedPackageName();
 
-            // 💡 Call compile with the additional package name argument
             CompilationResult compileResult = compilationService.compile(
                     submissionId,
-                    fullyQualifiedPackageName, // 💡 Pass the package name here
+                    fullyQualifiedPackageName,
                     submissionRootPath,
                     logConsumer
             );
@@ -94,6 +91,7 @@ public class CodeExecutorService {
                 overallStatus = Status.SUCCESS;
             }
 
+            // ✅ FIX: Map memoryBytes from ExecutionResult to CodeExecutionResultDTO
             for (ExecutionResult.TestCaseOutput tcOutput : runResult.getTestCaseOutputs()) {
                 finalTestCaseOutputs.add(CodeExecutionResultDTO.TestCaseOutput.builder()
                         .testCaseIndex(tcOutput.getTestCaseIndex())
@@ -101,6 +99,7 @@ public class CodeExecutorService {
                         .executionTimeMs(tcOutput.getExecutionTimeMs())
                         .errorMessage(tcOutput.getErrorMessage())
                         .errorType(tcOutput.getErrorType())
+                        .memoryBytes(tcOutput.getMemoryBytes()) // ✅ CRITICAL FIX: Add this line!
                         .build());
             }
 
