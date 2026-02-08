@@ -1,195 +1,278 @@
-# Code Execution Engine Documentation
+# 🚀 Code Execution Engine (CXE)
 
-## Overview
+A high-performance, production-ready microservice for securely compiling and executing user-submitted code against test cases. Built for LeetCode-style competitive programming platforms.
 
-The Code Execution Engine provides a robust and secure solution for executing user-submitted code with test cases. It's designed as a Spring Boot service that can be easily integrated into your application for code evaluation, testing, and validation purposes.
+[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-green.svg)](https://spring.io/projects/spring-boot)
+[![Docker](https://img.shields.io/badge/Docker-Required-blue.svg)](https://www.docker.com/)
+[![Redis](https://img.shields.io/badge/Redis-7+-red.svg)](https://redis.io/)
 
-## 🚀 Code Execution Manager
+## 📋 Overview
 
-The `CodeExecutionManager` is the primary entry point for submitting and executing user code. It orchestrates the entire process, from generating source files to running the code in a secure environment and cleaning up temporary resources. This class is designed as a `@Service` and can be easily autowired into other components of your application.
+CXE is a standalone microservice that handles the complete lifecycle of code execution:
 
-### Usage
+1. **Receives** code submissions via REST API
+2. **Generates** test harness code dynamically
+3. **Compiles** user code securely
+4. **Executes** in isolated Docker containers
+5. **Returns** execution results with runtime/memory metrics
 
-To use the `CodeExecutionManager`,
+### Key Features
 
-- First Pull the docker image from dockerhub by running
+- 🔒 **Secure Sandbox Execution** - Docker-based isolation with resource limits
+- ⚡ **Async Queue Processing** - Redis-backed job queue with worker pool
+- 🧠 **Memory Tracking** - Real-time memory usage measurement
+- 🎯 **Multi-Language Support** - Java & Python (extensible)
+- 📊 **Per-Test-Case Metrics** - Individual timing and output for each test
+- 🔄 **LeetCode-Compatible** - Automatic imports, custom data structures (ListNode, TreeNode, Node)
+
+## 🏗️ Architecture
+
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                    Submission Service                        │
+│                   (External Consumer)                        │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ HTTP POST /submit
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Code Execution Engine                       │
+│  ┌───────────────┐    ┌───────────────┐    ┌─────────────┐  │
+│  │  Controller   │───▶│  Redis Queue  │───▶│   Workers   │  │
+│  │  (REST API)   │    │  (Job Queue)  │    │   (Pool)    │  │
+│  └───────────────┘    └───────────────┘    └──────┬──────┘  │
+│                                                    │         │
+│  ┌───────────────────────────────────────────────┐│         │
+│  │              File Generators                   ││         │
+│  │  ┌─────────────┐  ┌─────────────────────────┐ ││         │
+│  │  │ Main.java   │  │ Solution.java           │ ││         │
+│  │  │ (Harness)   │  │ (User Code + DS)        │ ││         │
+│  │  └─────────────┘  └─────────────────────────┘ ││         │
+│  └───────────────────────────────────────────────┘│         │
+│                                                    ▼         │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │              Docker Container Execution                  ││
+│  │  • Compile (javac / python syntax check)                ││
+│  │  • Run with timeout and memory limits                   ││
+│  │  • Parse TEST_CASE_RESULT output                        ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 🚦 Quick Start
+
+### Prerequisites
+
+- **Java 17+**
+- **Docker** (with `docker` command accessible)
+- **Redis** (or use docker-compose)
+
+### 1. Pull the Runtime Image
+
+```bash
 docker pull hrishabhjoshi/my-java-runtime:17
 ```
 
-- Then simply autowire it into your service or controller and call the `runCodeWithTestcases` method.
+### 2. Start Dependencies
 
-```java
-import xyz.hrishabhjoshi.codeexecutionengine.CodeExecutionManager;
-import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
-import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
-
-@RestController
-public class CodeSubmissionController {
-
-    @Autowired
-    private CodeExecutionManager codeExecutionManager;
-
-    @PostMapping("/submit")
-    public CodeExecutionResultDTO submitCode(@RequestBody CodeSubmissionDTO submission) {
-        // You can add logging here to see the execution flow
-        return codeExecutionManager.runCodeWithTestcases(submission, System.out::println);
-    }
-}
+```bash
+docker-compose up -d redis
 ```
 
-## 📋 DTO Structures
+### 3. Run the Application
 
-The `runCodeWithTestcases` method expects a `CodeSubmissionDTO` object. This DTO is the central payload that contains all the information needed for the execution engine.
-
-### CodeSubmissionDTO
-
-This class encapsulates the user's code, test cases, and metadata about the problem.
-
-```java
-public class CodeSubmissionDTO {
-    private String userSolutionCode;
-    private List<Map<String, Object>> testCases;
-    private QuestionMetadata questionMetadata;
-    private String language;
-    private String submissionId;
-
-    // Getters and Setters
-}
+```bash
+./gradlew bootRun
 ```
 
-#### Properties
+The service starts on `http://localhost:8081`
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `userSolutionCode` | `String` | A string containing the user's solution. This should include the Solution class and any custom data structures they define. |
-| `testCases` | `List<Map<String, Object>>` | A list of maps, where each map represents a test case. The input for the test case should be under the key "input". |
-| `questionMetadata` | `QuestionMetadata` | An object containing metadata about the problem, essential for dynamic code generation. |
-| `language` | `String` | The programming language of the submission (e.g., "java"). |
-| `submissionId` | `String` | An optional unique ID for the submission. If not provided, a random UUID will be generated. |
+## 📡 API Reference
 
-### QuestionMetadata
+### Submit Code for Execution
 
-This object provides the necessary context for the code generator.
-
-```java
-public class QuestionMetadata {
-    private String fullyQualifiedPackageName;
-    private String returnType;
-    private String functionName;
-    private List<ParamInfoDTO> parameters;
-    private Map<String, String> customDataStructureNames;
-    
-    // Getters and Setters
-}
+```http
+POST /submit
+Content-Type: application/json
 ```
 
-#### Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `fullyQualifiedPackageName` | `String` | The package where the generated code should be placed (e.g., "com.algocrack.solution.q8"). |
-| `returnType` | `String` | The return type of the user's function (e.g., "Node", "int", "List<Integer>"). |
-| `functionName` | `String` | The name of the method to be called on the Solution class (e.g., "cloneGraph"). |
-| `parameters` | `List<ParamInfoDTO>` | A list of ParamInfoDTO objects defining the type and name of each function parameter. |
-| `customDataStructureNames` | `Map<String, String>` | A map that tells the generator which custom classes to handle. The key is the generic name (e.g., "Node"), and the value is the specific class name to be used (e.g., "Node"). |
-
-### ParamInfoDTO
-
-This object describes a single parameter of the user's function.
-
-```java
-public class ParamInfoDTO {
-    private String name;
-    private String type;
-    
-    // Getters and Setters
-}
-```
-
-#### Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `String` | The parameter name |
-| `type` | `String` | The parameter type |
-
-## 💡 Example Usage
-
-### Clone Graph Problem Example
-
-To submit a solution for a problem like "Clone Graph," where a custom `Node` data structure is required, your `CodeSubmissionDTO` JSON should look like this:
-
+**Request Body:**
 ```json
 {
-  "submissionId": "unique-submission-id-123",
-  "language": "java",
-  "userSolutionCode": "import com.fasterxml.jackson.annotation.JsonProperty;\\nimport java.util.*;\\n\\nclass Node {\\n    @JsonProperty\\n    public int val;\\n    @JsonProperty\\n    public List<Node> neighbors;\\n\\n    // ... constructors\\n}\\n\\nclass Solution {\\n    public Node cloneGraph(Node node) {\\n        // ... user's complete solution code ...\\n    }\\n}",
-  "testCases": [
-    {
-      "input": {
-        "node": "[[2,4],[1,3],[2,4],[1,3]]"
-      }
-    },
-    {
-      "input": {
-        "node": "[]"
-      }
-    }
-  ],
-  "questionMetadata": {
-    "fullyQualifiedPackageName": "com.algocrack.solution.q8",
-    "returnType": "Node",
-    "functionName": "cloneGraph",
+  "submissionId": "run-12345",
+  "userId": 1,
+  "questionId": 42,
+  "language": "JAVA",
+  "code": "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        // solution\n    }\n}",
+  "metadata": {
+    "functionName": "twoSum",
+    "returnType": "int[]",
     "parameters": [
-      {
-        "name": "node",
-        "type": "Node"
-      }
-    ],
-    "customDataStructureNames": {
-      "Node": "Node"
-    }
-  }
+      { "name": "nums", "type": "int[]" },
+      { "name": "target", "type": "int" }
+    ]
+  },
+  "testCases": [
+    { "input": [[2,7,11,15], 9] },
+    { "input": [[3,2,4], 6] }
+  ]
 }
 ```
 
-## 🔧 Key Features
+**Response (202 Accepted):**
+```json
+{
+  "submissionId": "run-12345",
+  "status": "QUEUED",
+  "message": "Submission queued for execution"
+}
+```
 
-- **Secure Execution**: Runs code in an isolated environment with proper security measures
-- **Multiple Language Support**: Currently supports Java with extensibility for other languages
-- **Custom Data Structures**: Handles complex data structures like custom classes and nodes
-- **Test Case Validation**: Automatically runs submitted code against provided test cases
-- **Dynamic Code Generation**: Generates necessary boilerplate code for execution
-- **Resource Management**: Automatic cleanup of temporary files and resources
-- **Spring Integration**: Seamlessly integrates with Spring Boot applications
+### Poll Execution Status
 
-## 🛡️ Security Considerations
+```http
+GET /status/{submissionId}
+```
 
-The Code Execution Engine is designed with security as a primary concern. It provides:
+**Response:**
+```json
+{
+  "submissionId": "run-12345",
+  "status": "COMPLETED",
+  "runtimeMs": 15,
+  "memoryKb": 21340,
+  "testCaseResults": [
+    {
+      "index": 0,
+      "passed": null,
+      "actualOutput": "[0,1]",
+      "executionTimeMs": 3
+    }
+  ]
+}
+```
 
-- Isolated execution environments
-- Resource limitation and monitoring
-- Temporary file cleanup
-- Secure code compilation and execution
+### Get Full Results
 
-## 🔄 Workflow
+```http
+GET /result/{submissionId}
+```
 
-1. **Submission**: Code is submitted via the `CodeSubmissionDTO`
-2. **Validation**: Input validation and metadata processing
-3. **Code Generation**: Dynamic generation of execution wrapper code
-4. **Compilation**: Secure compilation of user code
-5. **Execution**: Running code against test cases in isolated environment
-6. **Results**: Collection and formatting of execution results
-7. **Cleanup**: Automatic cleanup of temporary resources
+## 🔧 Configuration
+
+Key settings in `application.yml`:
+
+```yaml
+cxe:
+  worker:
+    count: 4                    # Number of parallel workers
+  execution:
+    timeout-seconds: 10         # Max execution time per submission
+    memory-limit-mb: 256        # Container memory limit
+  docker:
+    image: hrishabhjoshi/my-java-runtime:17
+```
+
+## 📁 Project Structure
+
+```
+src/main/java/xyz/hrishabhjoshi/codeexecutionengine/
+├── controller/
+│   └── ExecutionController.java      # REST API endpoints
+├── service/
+│   ├── helperservice/
+│   │   ├── ExecutionQueueService.java    # Redis queue operations
+│   │   └── ExecutionWorkerService.java   # Worker thread pool
+│   └── filehandlingservice/
+│       ├── java/
+│       │   ├── JavaFileGenerator.java         # Main + Solution file gen
+│       │   ├── JavaMainClassGenerator.java    # Test harness generator
+│       │   ├── JavaSolutionClassGenerator.java # User code wrapper
+│       │   ├── InputVariableGenerator.java    # Input parsing
+│       │   └── ValueDeclarationGenerator.java # Type-specific codegen
+│       └── python/
+│           └── PythonFileGenerator.java
+├── dto/
+│   ├── ExecutionRequest.java        # Incoming request DTO
+│   └── ExecutionStatus.java         # Status response DTO
+└── CodeExecutionManager.java        # Core execution orchestrator
+```
+
+## 🧩 Supported Types
+
+### Java Types
+
+| Type | Example Input | Generated Code |
+|------|--------------|----------------|
+| `int` | `42` | `int x = 42;` |
+| `int[]` | `[1,2,3]` | `int[] x = new int[]{1, 2, 3};` |
+| `int[][]` | `[[1,2],[3,4]]` | `int[][] x = new int[][]{{1,2},{3,4}};` |
+| `String` | `"hello"` | `String x = "hello";` |
+| `String[]` | `["a","b"]` | `String[] x = new String[]{"a", "b"};` |
+| `char[][]` | `[["a","b"]]` | `char[][] x = new char[][]{{'a','b'}};` |
+| `ListNode` | `[1,2,3]` | Auto-generates linked list construction |
+| `TreeNode` | `[1,2,3,null,4]` | Auto-generates binary tree construction |
+| `Node` | `[[2,4],[1,3]]` | Auto-generates graph construction |
+
+### Python Types
+
+| Type | Example Input |
+|------|--------------|
+| `int` | `42` |
+| `List[int]` | `[1,2,3]` |
+| `List[List[int]]` | `[[1,2],[3,4]]` |
+| `str` | `"hello"` |
+| `ListNode` | `[1,2,3]` |
+| `TreeNode` | `[1,2,3,null,4]` |
+
+## 🔒 Security
+
+- **Docker Isolation**: Each execution runs in a disposable container
+- **Resource Limits**: Memory and CPU constraints prevent abuse
+- **Timeout Enforcement**: Hard kill after timeout to prevent infinite loops
+- **No Network Access**: Containers run without network by default
+- **Temp Cleanup**: All generated files are deleted after execution
+
+## 🧪 Development
+
+### Run Tests
+
+```bash
+./gradlew test
+```
+
+### Build
+
+```bash
+./gradlew clean build
+```
+
+### Local Development with All Dependencies
+
+```bash
+docker-compose up -d
+./gradlew bootRun
+```
+
+## 📊 Monitoring
+
+- **Redis Commander**: `http://localhost:8085` (enable with `--profile dev-tools`)
+- **Application Logs**: See `application.yml` for log level configuration
+
+## 🤝 Integration
+
+CXE is designed to be consumed by a **Submission Service** which handles:
+- User authentication
+- Oracle (reference solution) execution
+- Result comparison and verdict determination
+- Database persistence
+
+See `context/frontend-integration-guide.md` for full integration details.
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-*This documentation covers the core functionality of the Code Execution Engine. For additional features or advanced configuration options, please refer to the complete API documentation.*
-
-## License
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+**Part of the AlgoCrack Platform** - A modern competitive programming platform.
