@@ -10,17 +10,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Python file generator that creates the necessary Python files for code execution.
+ * Python file generator that creates the necessary Python files for code
+ * execution.
  *
- * <p>This component is responsible for generating Python source files from
- * submission data, including:</p>
+ * <p>
+ * This component is responsible for generating Python source files from
+ * submission data, including:
+ * </p>
  * <ul>
- *   <li>main.py - Contains test case execution logic</li>
- *   <li>solution.py - Contains user's solution code and data structures</li>
+ * <li>main.py - Contains test case execution logic</li>
+ * <li>solution.py - Contains user's solution code and data structures</li>
  * </ul>
  *
- * <p>The generated files are organized in a package directory structure
- * that matches the fully qualified package name from the question metadata.</p>
+ * <p>
+ * The generated files are organized in a package directory structure
+ * that matches the fully qualified package name from the question metadata.
+ * </p>
  *
  * @author Hrishabhj Joshi
  * @version 1.0
@@ -38,23 +43,27 @@ public class PythonFileGenerator implements FileGenerator {
     /**
      * Generates all necessary Python files for code execution.
      *
-     * <p>This method creates a complete Python package structure with:</p>
+     * <p>
+     * This method creates a complete Python package structure with:
+     * </p>
      * <ul>
-     *   <li>Package directories based on the fully qualified package name</li>
-     *   <li>main.py file containing test case execution logic</li>
-     *   <li>solution.py file containing the user's solution code</li>
+     * <li>Package directories based on the fully qualified package name</li>
+     * <li>main.py file containing test case execution logic</li>
+     * <li>solution.py file containing the user's solution code</li>
      * </ul>
      *
      * @param submissionDto The submission data containing user code and metadata
-     * @param rootPath The root directory where files should be generated
-     * @throws IOException if file creation or writing operations fail
+     * @param rootPath      The root directory where files should be generated
+     * @throws IOException              if file creation or writing operations fail
      * @throws IllegalArgumentException if required metadata is missing
      */
     @Override
     public void generateFiles(CodeSubmissionDTO submissionDto, Path rootPath) throws IOException {
         CodeSubmissionDTO.QuestionMetadata metadata = submissionDto.getQuestionMetadata();
-        if (metadata == null || metadata.getFullyQualifiedPackageName() == null) {
-            throw new IllegalArgumentException("QuestionMetadata or fully qualified package name is missing.");
+        // Note: ExecutionWorkerService ensures metadata is never null and always has a
+        // valid package name
+        if (metadata == null) {
+            throw new IllegalArgumentException("QuestionMetadata is missing (this should never happen)");
         }
 
         Path packageDir = createPackageDirectories(rootPath, metadata.getFullyQualifiedPackageName());
@@ -65,12 +74,15 @@ public class PythonFileGenerator implements FileGenerator {
     }
 
     /**
-     * Creates the package directory structure based on the fully qualified package name.
+     * Creates the package directory structure based on the fully qualified package
+     * name.
      *
-     * <p>Converts dot-separated package names into corresponding directory paths.
-     * For example, "com.algocrack.solution.q9" becomes "com/algocrack/solution/q9".</p>
+     * <p>
+     * Converts dot-separated package names into corresponding directory paths.
+     * For example, "com.algocrack.solution.q9" becomes "com/algocrack/solution/q9".
+     * </p>
      *
-     * @param rootPath The root directory path
+     * @param rootPath                  The root directory path
      * @param fullyQualifiedPackageName The dot-separated package name
      * @return Path object representing the complete package directory structure
      */
@@ -87,7 +99,7 @@ public class PythonFileGenerator implements FileGenerator {
      * Generates the main.py file containing test case execution logic.
      *
      * @param submissionDto The submission data
-     * @param packageDir The target package directory
+     * @param packageDir    The target package directory
      * @throws IOException if file writing fails
      */
     private void generateMainFile(CodeSubmissionDTO submissionDto, Path packageDir) throws IOException {
@@ -100,7 +112,7 @@ public class PythonFileGenerator implements FileGenerator {
      * Generates the solution.py file containing user's solution code.
      *
      * @param submissionDto The submission data
-     * @param packageDir The target package directory
+     * @param packageDir    The target package directory
      * @throws IOException if file writing fails
      */
     private void generateSolutionFile(CodeSubmissionDTO submissionDto, Path packageDir) throws IOException {

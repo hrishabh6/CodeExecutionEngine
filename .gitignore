@@ -55,3 +55,8 @@ ossrhPassword
 *.log
 
 gradle.properties
+
+# Temporary submission directories (code execution)
+submission-*/
+
+/context

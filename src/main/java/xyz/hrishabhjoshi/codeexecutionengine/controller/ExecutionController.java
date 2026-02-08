@@ -7,8 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
-import xyz.hrishabhjoshi.codeexecutionengine.service.ExecutionQueueService;
-import xyz.hrishabhjoshi.codeexecutionengine.service.SubmissionStatusService;
+import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionQueueService;
+import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.SubmissionStatusService;
 
 import java.util.Map;
 
@@ -51,12 +51,33 @@ public class ExecutionController {
                                                 ? request.getMetadata().getParameters().size()
                                                 : 0);
 
+                // [DEBUG_TRACE] Log raw request details
+                try {
+                        log.info(">>> [DEBUG_TRACE] Raw Request: submissionId={}, language={}, questionId={}",
+                                        request.getSubmissionId(), request.getLanguage(), request.getQuestionId());
+                        if (request.getTestCases() != null) {
+                                log.info(">>> [DEBUG_TRACE] Request TestCases count: {}",
+                                                request.getTestCases().size());
+                                if (!request.getTestCases().isEmpty()) {
+                                        log.info(">>> [DEBUG_TRACE] First TestCase: {}", request.getTestCases().get(0));
+                                }
+                        } else {
+                                log.info(">>> [DEBUG_TRACE] Request TestCases is NULL");
+                        }
+                } catch (Exception e) {
+                        log.error(">>> [DEBUG_TRACE] Error logging request details", e);
+                }
+
                 // Capture client info
                 request.setIpAddress(getClientIp(httpRequest));
                 request.setUserAgent(httpRequest.getHeader("User-Agent"));
 
                 // Enqueue for async processing
                 log.info("[CONTROLLER] Calling queueService.enqueue()...");
+
+                // [DEBUG_TRACE] Log enqueue intent
+                log.info(">>> [DEBUG_TRACE] Enqueuing submission: {}", request.getSubmissionId());
+
                 String submissionId = queueService.enqueue(request);
                 log.info("[CONTROLLER] Enqueued successfully with submissionId={}", submissionId);
 

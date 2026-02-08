@@ -68,8 +68,19 @@ execution:
     memory-limit: 256m
     cpu-limit: 0.5
 
+# External Services
+services:
+  entity:
+    base-url: ${ENTITY_SERVICE_URL:http://localhost:8082}
+
 # Logging
 logging:
   level:
+    # Application logs - keep DEBUG for our code
     xyz.hrishabhjoshi.codeexecutionengine: DEBUG
-    org.springframework.data.redis: DEBUG
+    # Suppress noisy framework logs
+    org.springframework.data.redis: WARN
+    org.springframework.data.redis.core.RedisConnectionUtils: WARN
+    io.lettuce: WARN
+    # Keep Spring Boot info logs only
+    org.springframework: INFO

@@ -1,4 +1,4 @@
-package xyz.hrishabhjoshi.codeexecutionengine.service;
+package xyz.hrishabhjoshi.codeexecutionengine.service.helperservice;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Service for managing the Redis execution queue and submission status.
- * NOTE: CXE does NOT persist to Submission table - that's SubmissionService's responsibility.
+ * NOTE: CXE does NOT persist to Submission table - that's SubmissionService's
+ * responsibility.
  * CXE only tracks execution status in Redis.
  */
 @Slf4j
@@ -48,7 +49,7 @@ public class ExecutionQueueService {
      */
     public String enqueue(ExecutionRequest request) {
         log.info("=== [QUEUE] enqueue() called ===");
-        
+
         // Generate submission ID if not provided
         String submissionId = request.getSubmissionId();
         if (submissionId == null || submissionId.isEmpty()) {
@@ -71,7 +72,7 @@ public class ExecutionQueueService {
         // Add to queue (LPUSH = left push, workers BRPOP from right)
         log.info("[QUEUE] LPUSH to queue '{}' for submissionId={}", queueName, submissionId);
         redisTemplate.opsForList().leftPush(queueName, request);
-        
+
         Long queueSize = redisTemplate.opsForList().size(queueName);
         log.info("[QUEUE] Enqueued successfully. Queue size is now: {}", queueSize);
 
@@ -85,13 +86,13 @@ public class ExecutionQueueService {
      * @return The next request or null if timeout
      */
     public ExecutionRequest dequeue(long timeoutSeconds) {
-        log.debug("[QUEUE] Worker calling BRPOP on '{}' with timeout={}s...", queueName, timeoutSeconds);
-        
+        log.trace("[QUEUE] Worker calling BRPOP on '{}' with timeout={}s...", queueName, timeoutSeconds);
+
         Object result = redisTemplate.opsForList()
                 .rightPop(queueName, timeoutSeconds, TimeUnit.SECONDS);
 
         if (result == null) {
-            log.debug("[QUEUE] BRPOP timeout - no items in queue");
+            log.trace("[QUEUE] BRPOP timeout - no items in queue");
             return null;
         }
 
@@ -165,7 +166,8 @@ public class ExecutionQueueService {
 
     /**
      * Cancel a pending submission.
-     * NOTE: CXE only updates Redis status - SubmissionService owns the submission table.
+     * NOTE: CXE only updates Redis status - SubmissionService owns the submission
+     * table.
      *
      * @param submissionId The submission ID
      * @return true if cancelled, false if not found or already processing

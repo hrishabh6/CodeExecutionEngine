@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import xyz.hrishabhjoshi.codeexecutionengine.service.ExecutionWorkerService;
+import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionWorkerService;
 
 /**
  * Bootstraps worker threads on application startup.

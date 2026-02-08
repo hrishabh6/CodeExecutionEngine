@@ -23,8 +23,11 @@ public class SubmissionStatusDto {
     private String status;
 
     /**
-     * Final verdict (only present when COMPLETED)
+     * @deprecated Always null from CXE. Verdict determination is handled
+     *             exclusively by Submission Service using oracle comparison.
+     *             DO NOT reintroduce judging logic in CXE.
      */
+    @Deprecated
     private String verdict;
 
     /**
@@ -90,7 +93,5 @@ public class SubmissionStatusDto {
         private Long memoryBytes;
         private String error;
         private String errorType;
-        private Boolean isCustom;
-
     }
 }

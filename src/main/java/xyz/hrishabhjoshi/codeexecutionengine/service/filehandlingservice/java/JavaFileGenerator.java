@@ -19,8 +19,10 @@ public class JavaFileGenerator implements FileGenerator {
         log.debug("Starting file generation...");
 
         QuestionMetadata metadata = submissionDto.getQuestionMetadata();
-        if (metadata == null || metadata.getFullyQualifiedPackageName() == null) {
-            throw new IllegalArgumentException("QuestionMetadata or fully qualified package name is missing.");
+        // Note: ExecutionWorkerService ensures metadata is never null and always has a
+        // valid package name
+        if (metadata == null) {
+            throw new IllegalArgumentException("QuestionMetadata is missing (this should never happen)");
         }
 
         Path packageDir = createPackageDirectories(rootPath, metadata.getFullyQualifiedPackageName());
@@ -32,11 +34,19 @@ public class JavaFileGenerator implements FileGenerator {
         Files.writeString(mainFilePath, mainClassContent);
         log.debug("Main.java generated at {}", mainFilePath.toAbsolutePath());
 
+        // [DEBUG_TRACE] Log Main.java content
+        log.info(">>> [DEBUG_TRACE] Main.java CONTENT START:\n{}\n>>> [DEBUG_TRACE] Main.java CONTENT END",
+                mainClassContent);
+
         log.debug("Generating Solution.java content...");
         String solutionClassContent = JavaSolutionClassGenerator.generateSolutionClassContent(submissionDto);
         Path solutionFilePath = packageDir.resolve("Solution.java");
         Files.writeString(solutionFilePath, solutionClassContent);
         log.debug("Solution.java generated at {}", solutionFilePath.toAbsolutePath());
+
+        // [DEBUG_TRACE] Log Solution.java content
+        log.info(">>> [DEBUG_TRACE] Solution.java CONTENT START:\n{}\n>>> [DEBUG_TRACE] Solution.java CONTENT END",
+                solutionClassContent);
     }
 
     private Path createPackageDirectories(Path rootPath, String fullyQualifiedPackageName) {

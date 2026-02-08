@@ -1,17 +1,15 @@
-package xyz.hrishabhjoshi.codeexecutionengine.service;
+package xyz.hrishabhjoshi.codeexecutionengine.service.helperservice;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.SubmissionStatusDto;
-import xyz.hrishabhjoshi.codeexecutionengine.repository.ExecutionMetricsRepository;
 
 import java.util.Optional;
 
 /**
  * Service for retrieving submission status from Redis.
- * NOTE: CXE only uses Redis for status - it does NOT access the submission table
- * (that's SubmissionService's responsibility).
+ * CXE only uses Redis for status - no DB access.
  */
 @Slf4j
 @Service
@@ -19,7 +17,6 @@ import java.util.Optional;
 public class SubmissionStatusService {
 
     private final ExecutionQueueService queueService;
-    private final ExecutionMetricsRepository metricsRepository;
 
     /**
      * Get current status from Redis.
@@ -60,11 +57,10 @@ public class SubmissionStatusService {
     }
 
     /**
-     * Get average execution time from metrics.
+     * Get average execution time.
+     * Without DB, we return 0 - metrics tracking is not CXE's responsibility.
      */
     public double getAverageExecutionTime() {
-        Double avg = metricsRepository.getAverageExecutionTime();
-        return avg != null ? avg : 0.0;
+        return 0.0;  // No DB metrics - SubmissionService handles this
     }
 }
-

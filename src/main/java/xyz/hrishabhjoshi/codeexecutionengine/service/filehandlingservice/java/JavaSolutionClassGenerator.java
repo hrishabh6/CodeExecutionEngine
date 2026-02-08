@@ -34,10 +34,10 @@ public class JavaSolutionClassGenerator {
             }
         }
 
-        // Add standard imports for custom DS
-        if (!requiredDS.isEmpty()) {
-            content.append("import java.util.*;\n");
-        }
+        // Always add standard Java imports (LeetCode-style)
+        // Users expect java.util classes like PriorityQueue, List, Map, etc. to be
+        // available
+        content.append("import java.util.*;\n");
 
         // Add user's imports
         if (userImports.length() > 0) {

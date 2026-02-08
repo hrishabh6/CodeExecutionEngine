@@ -8,6 +8,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.service.factory.FileGeneratorFactor
 import xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.FileGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -16,6 +17,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+@Slf4j
 @Service
 public class CodeExecutionManager {
 
@@ -26,8 +28,8 @@ public class CodeExecutionManager {
     private FileGeneratorFactory fileGeneratorFactory;
 
     public CodeExecutionResultDTO runCodeWithTestcases(CodeSubmissionDTO submissionDto, Consumer<String> logConsumer) {
-        String submissionId = submissionDto.getSubmissionId() != null ?
-                submissionDto.getSubmissionId() : UUID.randomUUID().toString();
+        String submissionId = submissionDto.getSubmissionId() != null ? submissionDto.getSubmissionId()
+                : UUID.randomUUID().toString();
 
         Path tempRootPath = null;
 
@@ -36,14 +38,17 @@ public class CodeExecutionManager {
 
             FileGenerator fileGenerator = fileGeneratorFactory.getFileGenerator(submissionDto.getLanguage());
 
-            Path projectRootDir = Paths.get("").toAbsolutePath();
-            tempRootPath = Files.createTempDirectory(projectRootDir, "submission-" + submissionId);
+            // Use system temp directory instead of project root to avoid leftover files
+            Path systemTempDir = Paths.get(System.getProperty("java.io.tmpdir"));
+            tempRootPath = Files.createTempDirectory(systemTempDir, "cxe-submission-" + submissionId);
+            log.debug("Created temp directory: {}", tempRootPath);
 
             fileGenerator.generateFiles(submissionDto, tempRootPath);
 
             logConsumer.accept("Files generated at: " + tempRootPath.toAbsolutePath());
 
-            String fullyQualifiedMainClass = submissionDto.getQuestionMetadata().getFullyQualifiedPackageName() + ".Main";
+            String fullyQualifiedMainClass = submissionDto.getQuestionMetadata().getFullyQualifiedPackageName()
+                    + ".Main";
 
             CodeExecutionResultDTO result = codeExecutionService.executeCode(
                     submissionDto,
@@ -51,34 +56,53 @@ public class CodeExecutionManager {
                     tempRootPath,
                     fullyQualifiedMainClass,
                     submissionDto.getLanguage(),
-                    logConsumer
-            );
+                    logConsumer);
 
             return result;
 
         } catch (Exception e) {
             logConsumer.accept("An error occurred: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Execution error for submission {}: {}", submissionId, e.getMessage(), e);
             return CodeExecutionResultDTO.builder()
                     .overallStatus(Status.INTERNAL_ERROR)
                     .compilationOutput("Error: " + e.getMessage())
                     .build();
         } finally {
-            if (tempRootPath != null && Files.exists(tempRootPath)) {
-                logConsumer.accept("Cleaning up temporary files...");
-                try (Stream<Path> walk = Files.walk(tempRootPath)) {
-                    walk.sorted(Comparator.reverseOrder())
-                            .map(Path::toFile)
-                            .forEach(file -> {
-                                if (!file.delete()) {
-                                    logConsumer.accept("Failed to delete file: " + file);
-                                }
-                            });
-                    logConsumer.accept("Cleanup complete.");
-                } catch (IOException e) {
-                    logConsumer.accept("Error during cleanup: " + e.getMessage());
-                }
-            }
+            // CRITICAL: Always clean up temp files
+            cleanupTempDirectory(tempRootPath, logConsumer);
+        }
+    }
+
+    /**
+     * Recursively delete the temp directory.
+     * Logs failures but doesn't throw - cleanup should never break execution flow.
+     */
+    private void cleanupTempDirectory(Path tempRootPath, Consumer<String> logConsumer) {
+        if (tempRootPath == null || !Files.exists(tempRootPath)) {
+            return;
+        }
+
+        logConsumer.accept("Cleaning up temporary files...");
+        log.debug("Cleaning up temp directory: {}", tempRootPath);
+
+        try (Stream<Path> walk = Files.walk(tempRootPath)) {
+            walk.sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException e) {
+                            log.warn("Failed to delete {}: {}", path, e.getMessage());
+                            // Try again with File.delete() as fallback
+                            if (!path.toFile().delete()) {
+                                log.error("Cleanup failed for: {} - may require manual cleanup", path);
+                            }
+                        }
+                    });
+            logConsumer.accept("Cleanup complete.");
+            log.debug("Cleanup complete for: {}", tempRootPath);
+        } catch (IOException e) {
+            log.error("Error during cleanup of {}: {}", tempRootPath, e.getMessage());
+            logConsumer.accept("Error during cleanup: " + e.getMessage());
         }
     }
 }
