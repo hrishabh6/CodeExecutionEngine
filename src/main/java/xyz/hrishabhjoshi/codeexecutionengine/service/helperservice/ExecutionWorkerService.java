@@ -1,6 +1,5 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service;
 
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,10 +18,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-
 /**
  * Worker service that processes submissions from the queue.
- * NOTE: CXE does NOT persist to Submission table - that's SubmissionService's responsibility.
+ * NOTE: CXE does NOT persist to Submission table - that's SubmissionService's
+ * responsibility.
  * CXE only tracks execution status in Redis and saves metrics.
  */
 @Slf4j
@@ -34,6 +33,7 @@ public class ExecutionWorkerService {
     private final CodeExecutionManager codeExecutionManager;
     private final ExecutionMetricsRepository metricsRepository;
     private final ObjectMapper objectMapper;
+    private final xyz.hrishabhjoshi.codeexecutionengine.service.QuestionMetadataService questionMetadataService;
 
     @Value("${execution.worker.poll-timeout-seconds:5}")
     private long pollTimeoutSeconds;
@@ -66,7 +66,7 @@ public class ExecutionWorkerService {
                     if (pollCount % 10 == 1) { // Log every 10th poll to avoid spam
                         log.debug("[WORKER] {} polling (count={})", workerId, pollCount);
                     }
-                    
+
                     // Block waiting for next job
                     ExecutionRequest request = queueService.dequeue(pollTimeoutSeconds);
 
@@ -108,38 +108,49 @@ public class ExecutionWorkerService {
             log.info("[WORKER] {} CodeSubmissionDTO built: testCases={}, functionName={}",
                     workerId,
                     codeSubmission.getTestCases() != null ? codeSubmission.getTestCases().size() : 0,
-                    codeSubmission.getQuestionMetadata() != null ? codeSubmission.getQuestionMetadata().getFunctionName() : "null");
+                    codeSubmission.getQuestionMetadata() != null
+                            ? codeSubmission.getQuestionMetadata().getFunctionName()
+                            : "null");
 
             // Execute code
             log.info("[WORKER] {} calling CodeExecutionManager.runCodeWithTestcases()...", workerId);
             CodeExecutionResultDTO result = codeExecutionManager.runCodeWithTestcases(
                     codeSubmission,
-                    logLine -> log.debug("[{}] {}", submissionId, logLine)
-            );
+                    logLine -> log.debug("[{}] {}", submissionId, logLine));
             log.info("[WORKER] {} execution returned: overallStatus={}, testCaseOutputs count={}",
                     workerId, result.getOverallStatus(),
                     result.getTestCaseOutputs() != null ? result.getTestCaseOutputs().size() : 0);
 
-            long executionTime = System.currentTimeMillis() - startTime;
+            // Calculate actual code runtime from test case execution times (exclude
+            // compilation)
+            int actualRuntimeMs = 0;
+            if (result.getTestCaseOutputs() != null) {
+                actualRuntimeMs = result.getTestCaseOutputs().stream()
+                        .mapToInt(tc -> (int) tc.getExecutionTimeMs())
+                        .sum();
+            }
 
             // Determine verdict based on execution result (only official test cases)
             SubmissionVerdict verdict = determineVerdict(result, codeSubmission);
-            log.info("[WORKER] {} determined verdict={} in {}ms", workerId, verdict, executionTime);
+            log.info("[WORKER] {} determined verdict={}, actual code runtime={}ms",
+                    workerId, verdict, actualRuntimeMs);
 
             // Build test case results
-            List<SubmissionStatusDto.TestCaseResult> testCaseResults = 
-                buildTestCaseResults(result.getTestCaseOutputs(), codeSubmission);
+            List<SubmissionStatusDto.TestCaseResult> testCaseResults = buildTestCaseResults(result.getTestCaseOutputs(),
+                    codeSubmission);
 
             // Update final status (Redis only)
             log.info("[WORKER] {} updating final status to COMPLETED in Redis", workerId);
-            updateFinalStatus(submissionId, verdict, result, testCaseResults, 
-                            (int) executionTime, workerId);
+            updateFinalStatus(submissionId, verdict, result, testCaseResults,
+                    actualRuntimeMs, workerId);
 
-            // Save metrics to database
-            saveMetrics(submissionId, executionTime, workerId, result);
+            // Save metrics to database (use wall-clock time for total execution including
+            // compilation)
+            long wallClockTime = System.currentTimeMillis() - startTime;
+            saveMetrics(submissionId, wallClockTime, workerId, result);
 
-            log.info("=== [WORKER] {} COMPLETED {} - verdict={}, time={}ms ===", 
-                    workerId, submissionId, verdict, executionTime);
+            log.info("=== [WORKER] {} COMPLETED {} - verdict={}, runtime={}ms, total={}ms ===",
+                    workerId, submissionId, verdict, actualRuntimeMs, wallClockTime);
 
         } catch (Exception e) {
             log.error("=== [WORKER] {} FAILED {} ===", workerId, submissionId);
@@ -154,6 +165,42 @@ public class ExecutionWorkerService {
     private CodeSubmissionDTO buildCodeSubmission(ExecutionRequest request) {
         ExecutionRequest.QuestionMetadata meta = request.getMetadata();
 
+        // Fetch metadata from Entity Service if not provided
+        if (meta == null) {
+            if (request.getQuestionId() == null) {
+                throw new IllegalArgumentException(
+                        "Either 'metadata' or 'questionId' must be provided");
+            }
+
+            log.info("[WORKER] Metadata not provided, fetching from database for questionId={}",
+                    request.getQuestionId());
+
+            try {
+                xyz.hrishabhjoshi.codeexecutionengine.dto.QuestionMetadataResponse response = questionMetadataService
+                        .getQuestionMetadata(request.getQuestionId(), request.getLanguage());
+
+                // Convert Entity Service response to internal metadata
+                meta = ExecutionRequest.QuestionMetadata.builder()
+                        .fullyQualifiedPackageName(response.getFullyQualifiedPackageName())
+                        .functionName(response.getFunctionName())
+                        .returnType(response.getReturnType())
+                        .parameters(response.getParameters() != null ? response.getParameters().stream()
+                                .map(p -> new ExecutionRequest.Parameter(p.getName(), p.getType()))
+                                .collect(Collectors.toList()) : null)
+                        .customDataStructures(response.getCustomDataStructures())
+                        .build();
+
+                log.info("[WORKER] Fetched metadata: functionName={}, returnType={}, params={}",
+                        meta.getFunctionName(), meta.getReturnType(),
+                        meta.getParameters() != null ? meta.getParameters().size() : 0);
+            } catch (Exception e) {
+                log.error("[WORKER] Failed to fetch metadata from database: {}", e.getMessage(), e);
+                throw new RuntimeException("Failed to fetch question metadata for questionId=" +
+                        request.getQuestionId(), e);
+            }
+        }
+
+        // Rest of the existing logic
         List<ParamInfoDTO> params = new ArrayList<>();
         if (meta != null && meta.getParameters() != null) {
             params = meta.getParameters().stream()
@@ -161,18 +208,20 @@ public class ExecutionWorkerService {
                     .collect(Collectors.toList());
         }
 
-        CodeSubmissionDTO.QuestionMetadata questionMeta = null;
-        if (meta != null) {
-            questionMeta = CodeSubmissionDTO.QuestionMetadata.builder()
-                    .fullyQualifiedPackageName(meta.getFullyQualifiedPackageName() != null ? 
-                            meta.getFullyQualifiedPackageName() : 
-                            "com.algocrack.solution.q" + request.getQuestionId())
-                    .functionName(meta.getFunctionName())
-                    .returnType(meta.getReturnType())
-                    .parameters(params)
-                    .customDataStructureNames(meta.getCustomDataStructures())
-                    .build();
+        // Ensure we always have a valid package name
+        String packageName = "com.algocrack.solution.q" + request.getQuestionId();
+        if (meta != null && meta.getFullyQualifiedPackageName() != null &&
+                !meta.getFullyQualifiedPackageName().trim().isEmpty()) {
+            packageName = meta.getFullyQualifiedPackageName();
         }
+
+        CodeSubmissionDTO.QuestionMetadata questionMeta = CodeSubmissionDTO.QuestionMetadata.builder()
+                .fullyQualifiedPackageName(packageName)
+                .functionName(meta != null ? meta.getFunctionName() : null)
+                .returnType(meta != null ? meta.getReturnType() : null)
+                .parameters(params)
+                .customDataStructureNames(meta != null ? meta.getCustomDataStructures() : null)
+                .build();
 
         // Merge official + custom test cases
         List<Map<String, Object>> allTestCases = new ArrayList<>();
@@ -235,14 +284,15 @@ public class ExecutionWorkerService {
      */
     private List<SubmissionStatusDto.TestCaseResult> buildTestCaseResults(
             List<CodeExecutionResultDTO.TestCaseOutput> outputs, CodeSubmissionDTO submission) {
-        if (outputs == null) return new ArrayList<>();
-        
+        if (outputs == null)
+            return new ArrayList<>();
+
         return outputs.stream()
                 .map(tc -> {
                     // Get the isCustom flag from the test case
                     Map<String, Object> testCase = submission.getTestCases().get(tc.getTestCaseIndex());
                     Boolean isCustom = (Boolean) testCase.get("isCustom");
-                    
+
                     return SubmissionStatusDto.TestCaseResult.builder()
                             .index(tc.getTestCaseIndex())
                             .passed(tc.getErrorMessage() == null)
@@ -261,9 +311,9 @@ public class ExecutionWorkerService {
      * Update submission status in Redis only.
      * CXE does NOT update the submission table - that's SubmissionService's job.
      */
-    private void updateStatus(String submissionId, String status, String verdict, 
-                             String workerId, String errorMessage,
-                             List<SubmissionStatusDto.TestCaseResult> testCaseResults) {
+    private void updateStatus(String submissionId, String status, String verdict,
+            String workerId, String errorMessage,
+            List<SubmissionStatusDto.TestCaseResult> testCaseResults) {
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
                 .status(status)
@@ -281,10 +331,10 @@ public class ExecutionWorkerService {
      * Update final status with all results (Redis only).
      */
     private void updateFinalStatus(String submissionId, SubmissionVerdict verdict,
-                                   CodeExecutionResultDTO result,
-                                   List<SubmissionStatusDto.TestCaseResult> testCaseResults,
-                                   int runtimeMs, String workerId) {
-        
+            CodeExecutionResultDTO result,
+            List<SubmissionStatusDto.TestCaseResult> testCaseResults,
+            int runtimeMs, String workerId) {
+
         // Calculate max memory across all test cases
         Integer maxMemoryKb = null;
         if (result.getTestCaseOutputs() != null) {
@@ -294,12 +344,12 @@ public class ExecutionWorkerService {
                     .mapToLong(Long::longValue)
                     .max()
                     .orElse(0L);
-            
+
             if (maxBytes > 0) {
                 maxMemoryKb = MemoryParser.bytesToKB(maxBytes);
             }
         }
-        
+
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
                 .status("COMPLETED")
@@ -319,7 +369,7 @@ public class ExecutionWorkerService {
      * This is CXE's own table, not shared with SubmissionService.
      */
     private void saveMetrics(String submissionId, long executionTime,
-                            String workerId, CodeExecutionResultDTO result) {
+            String workerId, CodeExecutionResultDTO result) {
         try {
             ExecutionMetrics metrics = ExecutionMetrics.builder()
                     .submissionId(submissionId)
@@ -335,4 +385,3 @@ public class ExecutionWorkerService {
         }
     }
 }
-
