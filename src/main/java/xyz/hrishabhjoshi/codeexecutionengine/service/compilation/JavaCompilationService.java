@@ -20,7 +20,8 @@ public class JavaCompilationService implements CompilationService {
     }
 
     @Override
-    public CompilationResult compile(String submissionId, String fullyQualifiedPackageName, Path submissionPath, Consumer<String> logConsumer)
+    public CompilationResult compile(String submissionId, String fullyQualifiedPackageName, Path submissionPath,
+            Consumer<String> logConsumer)
             throws IOException, InterruptedException {
 
         logConsumer.accept("COMPILE_SERVICE: Starting compilation for submission: " + submissionId);
@@ -29,15 +30,11 @@ public class JavaCompilationService implements CompilationService {
 
         ProcessBuilder compilePb = new ProcessBuilder(
                 "docker", "run", "--rm",
-                "-v", submissionPath.toAbsolutePath().toString() + ":/app/src", // 💡 Mount to /app/src, not /app
-                "-w", "/app", // Working directory remains /app
+                "-v", submissionPath.toAbsolutePath().toString() + ":/app/src",
+                "-w", "/app",
                 DOCKER_IMAGE,
-                "javac",
-                "-d", "/app/src", // 💡 Output compiled classes to /app/src
-                "-cp", "/app/libs/*", // Classpath for Jackson libraries
-                "/app/src/" + packagePath + "/Main.java", // 💡 Correct path to the source file
-                "/app/src/" + packagePath + "/Solution.java" // 💡 Correct path to the source file
-        );
+                "sh", "-c",
+                "javac -d /app/src -cp '/app/libs/*' /app/src/" + packagePath + "/*.java");
         compilePb.redirectErrorStream(true);
 
         Process compileProcess = compilePb.start();

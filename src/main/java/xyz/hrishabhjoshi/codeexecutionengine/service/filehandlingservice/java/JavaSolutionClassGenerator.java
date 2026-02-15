@@ -17,10 +17,22 @@ public class JavaSolutionClassGenerator {
         QuestionMetadata metadata = submissionDto.getQuestionMetadata();
         StringBuilder content = new StringBuilder();
 
+        log.info("[SolutionGen] === START generating Solution.java ===");
+        log.info("[SolutionGen] packageName={}, functionName={}, returnType={}, questionType={}",
+                metadata.getFullyQualifiedPackageName(), metadata.getFunctionName(), metadata.getReturnType(),
+                metadata.getQuestionType());
+
+        // For design-class questions, user code IS the class — don't wrap in Solution
+        if ("DESIGN_CLASS".equals(metadata.getQuestionType())) {
+            log.info("[SolutionGen] DESIGN_CLASS mode: emitting user code as-is (not wrapped in Solution class)");
+            return generateDesignClassSolutionContent(submissionDto);
+        }
+
         content.append("package ").append(metadata.getFullyQualifiedPackageName()).append(";\n\n");
 
         // Auto-detect required custom data structures
         Set<String> requiredDS = detectRequiredDataStructures(metadata);
+        log.info("[SolutionGen] Detected required custom DS: {}", requiredDS);
         String userCode = submissionDto.getUserSolutionCode();
 
         // Extract imports from user code
@@ -33,6 +45,8 @@ public class JavaSolutionClassGenerator {
                 userCodeWithoutImports.append(line).append("\n");
             }
         }
+
+        log.info("[SolutionGen] Extracted {} import lines from user code", userImports.toString().split("\n").length);
 
         // Always add standard Java imports (LeetCode-style)
         // Users expect java.util classes like PriorityQueue, List, Map, etc. to be
@@ -56,6 +70,8 @@ public class JavaSolutionClassGenerator {
 
         // Add user code WITHOUT imports (already added above)
         content.append(userCodeWithoutImports.toString().trim());
+        log.info("[SolutionGen] Solution.java content length: {}", content.length());
+        log.info("[SolutionGen] === END generating Solution.java ===");
         return content.toString();
     }
 
@@ -87,7 +103,7 @@ public class JavaSolutionClassGenerator {
         return required;
     }
 
-    private static String generateCustomDSClass(String structureName) {
+     private static String generateCustomDSClass(String structureName) {
         StringBuilder classDef = new StringBuilder();
         switch (structureName) {
             case "ListNode":
@@ -125,5 +141,61 @@ public class JavaSolutionClassGenerator {
                 break;
         }
         return classDef.toString();
+    }
+
+    /**
+     * Generate Solution.java for design-class questions.
+     * User code IS the class — emit it as-is with package declaration and necessary DS classes.
+     */
+    private static String generateDesignClassSolutionContent(CodeSubmissionDTO submissionDto) {
+        QuestionMetadata metadata = submissionDto.getQuestionMetadata();
+        StringBuilder content = new StringBuilder();
+
+        content.append("package ").append(metadata.getFullyQualifiedPackageName()).append(";\n\n");
+
+        // Standard imports
+        content.append("import java.util.*;\n");
+
+        // Extract user imports
+        String userCode = submissionDto.getUserSolutionCode();
+        StringBuilder userImports = new StringBuilder();
+        StringBuilder userCodeWithoutImports = new StringBuilder();
+        for (String line : userCode.split("\n")) {
+            if (line.trim().startsWith("import ")) {
+                userImports.append(line).append("\n");
+            } else {
+                userCodeWithoutImports.append(line).append("\n");
+            }
+        }
+
+        if (userImports.length() > 0) {
+            content.append(userImports);
+        }
+        content.append("\n");
+
+        // Add custom DS class definitions if needed and not already in user code
+        Set<String> requiredDS = detectRequiredDataStructures(metadata);
+
+        // Also scan user code to detect DS usage
+        for (String ds : KNOWN_CUSTOM_DS) {
+            if (userCode.contains(ds)) {
+                requiredDS.add(ds);
+            }
+        }
+
+        for (String ds : requiredDS) {
+            if (!userCode.contains("class " + ds)) {
+                log.debug("[SolutionGen] Adding {} class to design-class Solution.java", ds);
+                content.append(generateCustomDSClass(ds));
+                content.append("\n");
+            }
+        }
+
+        // Emit user code without imports — user code already contains the class declaration
+        content.append(userCodeWithoutImports.toString().trim());
+
+        log.info("[SolutionGen] Design-class Solution.java content length: {}", content.length());
+        log.info("[SolutionGen] === END generating design-class Solution.java ===");
+        return content.toString();
     }
 }

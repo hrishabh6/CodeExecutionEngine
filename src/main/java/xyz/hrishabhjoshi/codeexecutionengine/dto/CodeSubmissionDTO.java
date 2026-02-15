@@ -33,5 +33,14 @@ public class CodeSubmissionDTO {
 
         // 💡 This map handles custom data structure class names
         private Map<String, String> customDataStructureNames;
+
+        // For void return types: which parameter index is mutated (0-indexed)
+        private String mutationTarget;
+
+        // For void return types: how to serialize the mutated parameter
+        private String serializationStrategy;
+
+        // Question type: "ALGORITHM" (default) or "DESIGN_CLASS"
+        private String questionType;
     }
 }

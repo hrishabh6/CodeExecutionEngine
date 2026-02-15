@@ -101,10 +101,33 @@ public class ExecutionWorkerService {
      */
     private void processSubmission(ExecutionRequest request, String workerId) {
         String submissionId = request.getSubmissionId();
-        log.info("=== [WORKER] {} processing submission {} ===", workerId, submissionId);
-        log.info("[WORKER] {} language={}, code length={}",
-                workerId, request.getLanguage(),
+        log.info("========================================");
+        log.info("=== [WORKER] {} START processing submission {} ===", workerId, submissionId);
+        log.info("========================================");
+        log.info("[WORKER] {} language={}, questionId={}, code length={}",
+                workerId, request.getLanguage(), request.getQuestionId(),
                 request.getCode() != null ? request.getCode().length() : 0);
+        if (request.getMetadata() != null) {
+            var meta = request.getMetadata();
+            log.info("[WORKER] {} INCOMING metadata: functionName={}, returnType={}, packageName={}",
+                    workerId, meta.getFunctionName(), meta.getReturnType(), meta.getFullyQualifiedPackageName());
+            if (meta.getParameters() != null) {
+                for (int i = 0; i < meta.getParameters().size(); i++) {
+                    var p = meta.getParameters().get(i);
+                    log.info("[WORKER] {} INCOMING metadata.param[{}]: name={}, type={}", workerId, i, p.getName(),
+                            p.getType());
+                }
+            }
+            log.info("[WORKER] {} INCOMING metadata.customDS={}", workerId, meta.getCustomDataStructures());
+        }
+        if (request.getTestCases() != null) {
+            log.info("[WORKER] {} INCOMING testCases count={}", workerId, request.getTestCases().size());
+            for (int i = 0; i < request.getTestCases().size(); i++) {
+                log.info("[WORKER] {} INCOMING testCase[{}]: {}", workerId, i, request.getTestCases().get(i));
+            }
+        } else {
+            log.warn("[WORKER] {} INCOMING testCases is NULL", workerId);
+        }
 
         long startTime = System.currentTimeMillis();
 
@@ -152,10 +175,24 @@ public class ExecutionWorkerService {
             log.info("[WORKER] {} calling CodeExecutionManager.runCodeWithTestcases()...", workerId);
             CodeExecutionResultDTO result = codeExecutionManager.runCodeWithTestcases(
                     codeSubmission,
-                    logLine -> log.debug("[{}] {}", submissionId, logLine));
+                    logLine -> log.info("[CXE:{}] {}", submissionId, logLine));
             log.info("[WORKER] {} execution returned: overallStatus={}, testCaseOutputs count={}",
                     workerId, result.getOverallStatus(),
                     result.getTestCaseOutputs() != null ? result.getTestCaseOutputs().size() : 0);
+            if (result.getTestCaseOutputs() != null) {
+                for (var tc : result.getTestCaseOutputs()) {
+                    log.info(
+                            "[WORKER] {} RESULT testCase[{}]: output='{}', timeMs={}, memBytes={}, error={}, errorType={}",
+                            workerId, tc.getTestCaseIndex(), tc.getActualOutput(),
+                            tc.getExecutionTimeMs(), tc.getMemoryBytes(),
+                            tc.getErrorMessage(), tc.getErrorType());
+                }
+            }
+            if (result.getCompilationOutput() != null && !result.getCompilationOutput().isEmpty()) {
+                log.info("[WORKER] {} compilationOutput (first 500 chars): {}", workerId,
+                        result.getCompilationOutput().substring(0,
+                                Math.min(500, result.getCompilationOutput().length())));
+            }
 
             // Calculate actual code runtime from test case execution times
             int actualRuntimeMs = 0;
@@ -198,7 +235,12 @@ public class ExecutionWorkerService {
      * Metadata MUST be provided by the caller (SubmissionService).
      */
     private CodeSubmissionDTO buildCodeSubmission(ExecutionRequest request) {
+        log.info("[BUILD_DTO] === Building CodeSubmissionDTO from ExecutionRequest ===");
         ExecutionRequest.QuestionMetadata meta = request.getMetadata();
+
+        log.info("[BUILD_DTO] Input metadata: functionName={}, returnType={}, packageName={}",
+                meta.getFunctionName(), meta.getReturnType(), meta.getFullyQualifiedPackageName());
+        log.info("[BUILD_DTO] Input metadata.customDS={}", meta.getCustomDataStructures());
 
         // Convert parameters
         List<ParamInfoDTO> params = new ArrayList<>();
@@ -206,12 +248,20 @@ public class ExecutionWorkerService {
             params = meta.getParameters().stream()
                     .map(p -> new ParamInfoDTO(p.getName(), p.getType()))
                     .collect(Collectors.toList());
+            log.info("[BUILD_DTO] Converted {} parameters:", params.size());
+            for (int i = 0; i < params.size(); i++) {
+                log.info("[BUILD_DTO]   param[{}]: name={}, type={}", i, params.get(i).getName(),
+                        params.get(i).getType());
+            }
+        } else {
+            log.warn("[BUILD_DTO] Parameters list is NULL");
         }
 
         // Ensure we have a valid package name
         String packageName = meta.getFullyQualifiedPackageName();
         if (packageName == null || packageName.trim().isEmpty()) {
             packageName = "com.algocrack.solution.submission";
+            log.warn("[BUILD_DTO] Package name was empty, using default: {}", packageName);
         }
 
         CodeSubmissionDTO.QuestionMetadata questionMeta = CodeSubmissionDTO.QuestionMetadata.builder()
@@ -220,21 +270,37 @@ public class ExecutionWorkerService {
                 .returnType(meta.getReturnType())
                 .parameters(params)
                 .customDataStructureNames(meta.getCustomDataStructures())
+                .questionType(meta.getQuestionType())
                 .build();
+
+        log.info(
+                "[BUILD_DTO] Built QuestionMetadata: functionName={}, returnType={}, packageName={}, params={}, customDS={}, mutationTarget={}, serializationStrategy={}",
+                questionMeta.getFunctionName(), questionMeta.getReturnType(),
+                questionMeta.getFullyQualifiedPackageName(),
+                questionMeta.getParameters() != null ? questionMeta.getParameters().size() : 0,
+                questionMeta.getCustomDataStructureNames(),
+                questionMeta.getMutationTarget(), questionMeta.getSerializationStrategy());
 
         // Use test cases as-is (no custom test case separation needed at CXE level)
         List<Map<String, Object>> allTestCases = new ArrayList<>();
         if (request.getTestCases() != null) {
             allTestCases.addAll(request.getTestCases());
         }
+        log.info("[BUILD_DTO] Test cases mapped: {} total", allTestCases.size());
+        for (int i = 0; i < allTestCases.size(); i++) {
+            log.info("[BUILD_DTO] testCase[{}]: {}", i, allTestCases.get(i));
+        }
 
-        return CodeSubmissionDTO.builder()
+        CodeSubmissionDTO dto = CodeSubmissionDTO.builder()
                 .submissionId(request.getSubmissionId())
                 .language(request.getLanguage())
                 .userSolutionCode(request.getCode())
                 .questionMetadata(questionMeta)
                 .testCases(allTestCases)
                 .build();
+
+        log.info("[BUILD_DTO] === CodeSubmissionDTO built successfully ===");
+        return dto;
     }
 
     /**

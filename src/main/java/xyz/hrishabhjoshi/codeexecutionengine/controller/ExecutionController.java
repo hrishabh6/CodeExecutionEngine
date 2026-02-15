@@ -44,12 +44,20 @@ public class ExecutionController {
                 log.info("[CONTROLLER] code length={}, testCases count={}",
                                 request.getCode() != null ? request.getCode().length() : 0,
                                 request.getTestCases() != null ? request.getTestCases().size() : 0);
-                log.info("[CONTROLLER] metadata: functionName={}, returnType={}, params count={}",
-                                request.getMetadata() != null ? request.getMetadata().getFunctionName() : "null",
-                                request.getMetadata() != null ? request.getMetadata().getReturnType() : "null",
-                                request.getMetadata() != null && request.getMetadata().getParameters() != null
-                                                ? request.getMetadata().getParameters().size()
-                                                : 0);
+                if (request.getMetadata() != null) {
+                        var meta = request.getMetadata();
+                        log.info("[CONTROLLER] metadata: functionName={}, returnType={}, packageName={}",
+                                        meta.getFunctionName(), meta.getReturnType(), meta.getFullyQualifiedPackageName());
+                        if (meta.getParameters() != null) {
+                                for (int i = 0; i < meta.getParameters().size(); i++) {
+                                        var p = meta.getParameters().get(i);
+                                        log.info("[CONTROLLER] metadata.param[{}]: name={}, type={}", i, p.getName(), p.getType());
+                                }
+                        }
+                        log.info("[CONTROLLER] metadata.customDataStructures={}", meta.getCustomDataStructures());
+                } else {
+                        log.warn("[CONTROLLER] metadata is NULL!");
+                }
 
                 // [DEBUG_TRACE] Log raw request details
                 try {
@@ -58,12 +66,14 @@ public class ExecutionController {
                         if (request.getTestCases() != null) {
                                 log.info(">>> [DEBUG_TRACE] Request TestCases count: {}",
                                                 request.getTestCases().size());
-                                if (!request.getTestCases().isEmpty()) {
-                                        log.info(">>> [DEBUG_TRACE] First TestCase: {}", request.getTestCases().get(0));
+                                for (int i = 0; i < request.getTestCases().size(); i++) {
+                                        log.info(">>> [DEBUG_TRACE] TestCase[{}]: {}", i, request.getTestCases().get(i));
                                 }
                         } else {
                                 log.info(">>> [DEBUG_TRACE] Request TestCases is NULL");
                         }
+                        log.info(">>> [DEBUG_TRACE] User code (first 200 chars): {}",
+                                        request.getCode() != null ? request.getCode().substring(0, Math.min(200, request.getCode().length())) : "null");
                 } catch (Exception e) {
                         log.error(">>> [DEBUG_TRACE] Error logging request details", e);
                 }

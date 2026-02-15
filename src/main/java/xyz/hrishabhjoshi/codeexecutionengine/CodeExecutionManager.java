@@ -31,25 +31,42 @@ public class CodeExecutionManager {
         String submissionId = submissionDto.getSubmissionId() != null ? submissionDto.getSubmissionId()
                 : UUID.randomUUID().toString();
 
+        log.info("[EXEC_MANAGER] === START runCodeWithTestcases for {} ===", submissionId);
+        log.info("[EXEC_MANAGER] language={}, testCases={}", submissionDto.getLanguage(),
+                submissionDto.getTestCases() != null ? submissionDto.getTestCases().size() : 0);
+        if (submissionDto.getQuestionMetadata() != null) {
+            var meta = submissionDto.getQuestionMetadata();
+            log.info("[EXEC_MANAGER] metadata: functionName={}, returnType={}, packageName={}, params={}, customDS={}, mutationTarget={}, serializationStrategy={}",
+                    meta.getFunctionName(), meta.getReturnType(), meta.getFullyQualifiedPackageName(),
+                    meta.getParameters() != null ? meta.getParameters().size() : 0,
+                    meta.getCustomDataStructureNames(),
+                    meta.getMutationTarget(), meta.getSerializationStrategy());
+        }
+
         Path tempRootPath = null;
 
         try {
             logConsumer.accept("Generating source files...");
 
+            log.info("[EXEC_MANAGER] Getting file generator for language: {}", submissionDto.getLanguage());
             FileGenerator fileGenerator = fileGeneratorFactory.getFileGenerator(submissionDto.getLanguage());
 
             // Use system temp directory instead of project root to avoid leftover files
             Path systemTempDir = Paths.get(System.getProperty("java.io.tmpdir"));
             tempRootPath = Files.createTempDirectory(systemTempDir, "cxe-submission-" + submissionId);
-            log.debug("Created temp directory: {}", tempRootPath);
+            log.info("[EXEC_MANAGER] Created temp directory: {}", tempRootPath);
 
+            log.info("[EXEC_MANAGER] Calling fileGenerator.generateFiles()...");
             fileGenerator.generateFiles(submissionDto, tempRootPath);
+            log.info("[EXEC_MANAGER] File generation complete");
 
             logConsumer.accept("Files generated at: " + tempRootPath.toAbsolutePath());
 
             String fullyQualifiedMainClass = submissionDto.getQuestionMetadata().getFullyQualifiedPackageName()
                     + ".Main";
+            log.info("[EXEC_MANAGER] Main class: {}", fullyQualifiedMainClass);
 
+            log.info("[EXEC_MANAGER] Calling codeExecutionService.executeCode()...");
             CodeExecutionResultDTO result = codeExecutionService.executeCode(
                     submissionDto,
                     submissionId,
@@ -57,6 +74,11 @@ public class CodeExecutionManager {
                     fullyQualifiedMainClass,
                     submissionDto.getLanguage(),
                     logConsumer);
+
+            log.info("[EXEC_MANAGER] executeCode returned: status={}, testCaseOutputs={}",
+                    result.getOverallStatus(),
+                    result.getTestCaseOutputs() != null ? result.getTestCaseOutputs().size() : 0);
+            log.info("[EXEC_MANAGER] === END runCodeWithTestcases for {} ===", submissionId);
 
             return result;
 

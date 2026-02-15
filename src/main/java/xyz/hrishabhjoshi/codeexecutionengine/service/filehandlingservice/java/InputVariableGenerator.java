@@ -51,16 +51,33 @@ public class InputVariableGenerator {
                         inputNode.size(), parameters.size());
             }
 
-            for (int i = 0; i < parameters.size(); i++) {
-                ParamInfoDTO param = parameters.get(i);
+            // Special case: single parameter with array type and input is the array itself
+            // e.g. solveSudoku(char[][] board) with input [[".",".","9",...],["7",...],...]
+            // The input IS the board, not a positional wrapper around it
+            if (parameters.size() == 1 && inputNode.size() != 1) {
+                ParamInfoDTO param = parameters.get(0);
                 String paramType = param.getType();
-                String paramName = param.getName();
-
-                if (i < inputNode.size()) {
-                    JsonNode paramValueNode = inputNode.get(i);
-                    generateVariable(builder, paramType, paramName, paramValueNode, metadata, testCaseIndex);
+                if (paramType.contains("[]") || paramType.startsWith("List<")) {
+                    log.info(
+                            "[InputVarGen] Single array/list param detected (type={}), using entire inputNode as value",
+                            paramType);
+                    generateVariable(builder, paramType, param.getName(), inputNode, metadata, testCaseIndex);
                 } else {
-                    log.error("[InputVarGen] ERROR: Missing value for param {} at index {}", paramName, i);
+                    // Single non-array param with mismatched input — use first element
+                    generateVariable(builder, paramType, param.getName(), inputNode.get(0), metadata, testCaseIndex);
+                }
+            } else {
+                for (int i = 0; i < parameters.size(); i++) {
+                    ParamInfoDTO param = parameters.get(i);
+                    String paramType = param.getType();
+                    String paramName = param.getName();
+
+                    if (i < inputNode.size()) {
+                        JsonNode paramValueNode = inputNode.get(i);
+                        generateVariable(builder, paramType, paramName, paramValueNode, metadata, testCaseIndex);
+                    } else {
+                        log.error("[InputVarGen] ERROR: Missing value for param {} at index {}", paramName, i);
+                    }
                 }
             }
         } else {
@@ -73,10 +90,12 @@ public class InputVariableGenerator {
             JsonNode paramValueNode, QuestionMetadata metadata, int testCaseIndex) throws JsonProcessingException {
         String declarationValue = ValueDeclarationGenerator.generateValueDeclaration(paramType, paramValueNode,
                 metadata.getCustomDataStructureNames());
-        
+
         // [DEBUG_TRACE] Log generated variable declaration
-        log.info(">>> [DEBUG_TRACE] Generating variable: type={}, name={}, valNode={}", paramType, paramName, paramValueNode);
-        log.info(">>> [DEBUG_TRACE] Generated code: {} {}{} = {};", paramType, paramName, testCaseIndex, declarationValue);
+        log.info(">>> [DEBUG_TRACE] Generating variable: type={}, name={}, valNode={}", paramType, paramName,
+                paramValueNode);
+        log.info(">>> [DEBUG_TRACE] Generated code: {} {}{} = {};", paramType, paramName, testCaseIndex,
+                declarationValue);
 
         builder.append("            ").append(paramType).append(" ").append(paramName).append(testCaseIndex)
                 .append(" = ").append(declarationValue).append(";\n");

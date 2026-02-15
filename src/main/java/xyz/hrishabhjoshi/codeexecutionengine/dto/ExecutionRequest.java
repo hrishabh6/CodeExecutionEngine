@@ -48,7 +48,6 @@ public class ExecutionRequest {
      */
     private List<Map<String, Object>> testCases;
 
-
     /**
      * Client IP address (set by server)
      */
@@ -69,6 +68,7 @@ public class ExecutionRequest {
         private String returnType;
         private List<Parameter> parameters;
         private Map<String, String> customDataStructures;
+        private String questionType; // "ALGORITHM" (default) or "DESIGN_CLASS"
     }
 
     @Data
