@@ -21,7 +21,7 @@ public class ExecutionRequest {
     /**
      * User who is submitting the code
      */
-    private Long userId;
+    private String userId;
 
     /**
      * Question being solved
