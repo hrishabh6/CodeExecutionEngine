@@ -5,6 +5,7 @@ import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.JobStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.dto.Status;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionJobResultStore;
 
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,45 +47,63 @@ public class KubernetesJobExecutor implements CodeExecutor {
 
         validateConfiguration();
 
-        String jobName = buildJobName(executionId);
+        String baseJobName = buildJobName(executionId);
         String namespace = kubernetesProperties.getNamespace();
         String payload = payloadCodec.encode(submissionDto);
+        int payloadSizeBytes = payload.getBytes(StandardCharsets.UTF_8).length;
 
-        log.info("[K8S_EXECUTOR] submissionId={} executionId={} jobName={} language={}",
-                submissionId, executionId, jobName, language);
+        if (payloadSizeBytes > kubernetesProperties.getMaxPayloadBytes()) {
+            String message = "Execution payload exceeds configured Kubernetes Job env limit: payloadBytes="
+                    + payloadSizeBytes + ", maxPayloadBytes=" + kubernetesProperties.getMaxPayloadBytes();
+            log.error("[K8S_EXECUTOR] submissionId={} executionId={} payload too large: {}",
+                    submissionId, executionId, message);
+            logConsumer.accept("K8S_EXECUTOR: " + message);
+            return buildInfrastructureFailure(submissionId, executionId, message);
+        }
 
-        Job job = buildJob(jobName, namespace, submissionId, executionId, payload);
+        int maxAttempts = Math.max(1, kubernetesProperties.getMaxAttempts());
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            String jobName = buildAttemptJobName(baseJobName, attempt);
+            log.info("[K8S_EXECUTOR] submissionId={} executionId={} attempt={}/{} jobName={} language={} payloadBytes={}",
+                    submissionId, executionId, attempt, maxAttempts, jobName, language, payloadSizeBytes);
 
-        logConsumer.accept("K8S_EXECUTOR: Kubernetes Job backend selected");
-        logConsumer.accept("K8S_EXECUTOR: Creating job " + jobName + " in namespace " + namespace);
-        kubernetesClient.batch().v1().jobs().inNamespace(namespace).resource(job).create();
+            Job job = buildJob(jobName, namespace, submissionId, executionId, payload);
+            logConsumer.accept("K8S_EXECUTOR: attempt " + attempt + "/" + maxAttempts
+                    + " creating job " + jobName + " in namespace " + namespace);
 
-        try {
-            Optional<CodeExecutionResultDTO> result = resultStore.await(
-                    executionId,
-                    Duration.ofSeconds(kubernetesProperties.getJobCompletionTimeoutSeconds()),
-                    Duration.ofMillis(kubernetesProperties.getResultPollIntervalMillis()));
+            boolean created = false;
+            try {
+                kubernetesClient.batch().v1().jobs().inNamespace(namespace).resource(job).create();
+                created = true;
 
-            if (result.isPresent()) {
-                logConsumer.accept("K8S_EXECUTOR: Received result for executionId " + executionId);
-                resultStore.delete(executionId);
-                return result.get();
+                CodeExecutionResultDTO result = waitForResultOrTerminalFailure(
+                        submissionId, executionId, namespace, jobName, logConsumer);
+                if (result != null) {
+                    return result;
+                }
+            } catch (Exception e) {
+                String message = "Failed to submit Kubernetes Job jobName=" + jobName + ": " + e.getMessage();
+                log.error("[K8S_EXECUTOR] submissionId={} executionId={} attempt={} jobName={} submit failed: {}",
+                        submissionId, executionId, attempt, jobName, e.getMessage(), e);
+                logConsumer.accept("K8S_EXECUTOR: " + message);
+                if (attempt == maxAttempts) {
+                    return buildInfrastructureFailure(submissionId, executionId, message);
+                }
+            } finally {
+                if (created && kubernetesProperties.isDeleteJobAfterRead()) {
+                    deleteJob(namespace, jobName, executionId);
+                }
             }
 
-            String diagnostics = collectDiagnostics(namespace, jobName);
-            logConsumer.accept("K8S_EXECUTOR: Timed out waiting for Kubernetes job result");
-            return CodeExecutionResultDTO.builder()
-                    .submissionId(submissionId)
-                    .executionId(executionId)
-                    .overallStatus(Status.INTERNAL_ERROR)
-                    .compilationOutput("Timed out waiting for Kubernetes Job result. " + diagnostics)
-                    .testCaseOutputs(List.of())
-                    .build();
-        } finally {
-            if (kubernetesProperties.isDeleteJobAfterRead()) {
-                deleteJob(namespace, jobName);
+            if (attempt < maxAttempts) {
+                sleepBeforeRetry(executionId, jobName, attempt, logConsumer);
             }
         }
+
+        return buildInfrastructureFailure(
+                submissionId,
+                executionId,
+                "Kubernetes Job execution failed after " + maxAttempts + " attempts");
     }
 
     private String buildJobName(String executionId) {
@@ -98,6 +118,19 @@ public class KubernetesJobExecutor implements CodeExecutor {
         if (kubernetesProperties.getJobImage() == null || kubernetesProperties.getJobImage().isBlank()) {
             throw new IllegalStateException("execution.kubernetes.job-image must be configured for kubernetes-job backend");
         }
+    }
+
+    private String buildAttemptJobName(String baseJobName, int attempt) {
+        if (attempt <= 1) {
+            return baseJobName;
+        }
+
+        String suffix = "-a" + attempt;
+        int maxBaseLength = Math.max(1, 63 - suffix.length());
+        String truncatedBase = baseJobName.length() > maxBaseLength
+                ? baseJobName.substring(0, maxBaseLength)
+                : baseJobName;
+        return truncatedBase + suffix;
     }
 
     private Job buildJob(String jobName, String namespace, String submissionId, String executionId, String payload) {
@@ -187,6 +220,31 @@ public class KubernetesJobExecutor implements CodeExecutor {
                 String phase = pod.getStatus() != null ? pod.getStatus().getPhase() : "unknown";
                 diagnostics.append("pod=").append(podName).append(", phase=").append(phase);
 
+                String podReason = pod.getStatus() != null ? pod.getStatus().getReason() : null;
+                if (podReason != null && !podReason.isBlank()) {
+                    diagnostics.append(", reason=").append(podReason);
+                }
+
+                if (pod.getStatus() != null && pod.getStatus().getContainerStatuses() != null) {
+                    pod.getStatus().getContainerStatuses().forEach(status -> {
+                        if (status.getState() != null && status.getState().getWaiting() != null) {
+                            diagnostics.append(", waitingReason=")
+                                    .append(status.getState().getWaiting().getReason());
+                        }
+                        if (status.getState() != null && status.getState().getWaiting() != null
+                                && status.getState().getWaiting().getMessage() != null) {
+                            diagnostics.append(", waitingMessage=")
+                                    .append(truncate(status.getState().getWaiting().getMessage()));
+                        }
+                        if (status.getState() != null && status.getState().getTerminated() != null) {
+                            diagnostics.append(", terminatedReason=")
+                                    .append(status.getState().getTerminated().getReason());
+                            diagnostics.append(", exitCode=")
+                                    .append(status.getState().getTerminated().getExitCode());
+                        }
+                    });
+                }
+
                 String logs = kubernetesClient.pods().inNamespace(namespace).withName(podName).getLog();
                 if (logs != null && !logs.isBlank()) {
                     diagnostics.append(", logs=").append(truncate(logs));
@@ -200,12 +258,107 @@ public class KubernetesJobExecutor implements CodeExecutor {
         }
     }
 
-    private void deleteJob(String namespace, String jobName) {
+    private void deleteJob(String namespace, String jobName, String executionId) {
         try {
             kubernetesClient.batch().v1().jobs().inNamespace(namespace).withName(jobName).delete();
         } catch (Exception e) {
-            log.warn("[K8S_EXECUTOR] Failed to delete job {}: {}", jobName, e.getMessage());
+            log.warn("[K8S_EXECUTOR] executionId={} failed to delete job {}: {}", executionId, jobName, e.getMessage());
         }
+    }
+
+    private CodeExecutionResultDTO waitForResultOrTerminalFailure(
+            String submissionId,
+            String executionId,
+            String namespace,
+            String jobName,
+            Consumer<String> logConsumer) {
+
+        long pollIntervalMillis = Math.max(250, kubernetesProperties.getResultPollIntervalMillis());
+        long deadline = System.nanoTime() + Duration.ofSeconds(kubernetesProperties.getJobCompletionTimeoutSeconds()).toNanos();
+
+        while (System.nanoTime() < deadline) {
+            Optional<CodeExecutionResultDTO> result = resultStore.get(executionId);
+            if (result.isPresent()) {
+                log.info("[K8S_EXECUTOR] submissionId={} executionId={} jobName={} received Redis result",
+                        submissionId, executionId, jobName);
+                resultStore.delete(executionId);
+                return result.get();
+            }
+
+            Job currentJob = kubernetesClient.batch().v1().jobs().inNamespace(namespace).withName(jobName).get();
+            if (isFailed(currentJob)) {
+                String diagnostics = collectDiagnostics(namespace, jobName);
+                String message = "Kubernetes Job failed before writing result. executionId=" + executionId
+                        + ", jobName=" + jobName + ". " + diagnostics;
+                log.error("[K8S_EXECUTOR] {}", message);
+                logConsumer.accept("K8S_EXECUTOR: " + message);
+                return buildInfrastructureFailure(submissionId, executionId, message);
+            }
+
+            sleep(pollIntervalMillis);
+        }
+
+        String diagnostics = collectDiagnostics(namespace, jobName);
+        String message = "Timed out waiting for Kubernetes Job result. executionId=" + executionId
+                + ", jobName=" + jobName + ". " + diagnostics;
+        log.error("[K8S_EXECUTOR] {}", message);
+        logConsumer.accept("K8S_EXECUTOR: " + message);
+        return buildInfrastructureFailure(submissionId, executionId, message);
+    }
+
+    private boolean isFailed(Job job) {
+        if (job == null) {
+            return false;
+        }
+
+        JobStatus status = job.getStatus();
+        if (status == null) {
+            return false;
+        }
+
+        if (status.getFailed() != null && status.getFailed() > 0) {
+            return true;
+        }
+
+        if (status.getConditions() == null) {
+            return false;
+        }
+
+        return status.getConditions().stream()
+                .anyMatch(condition -> "Failed".equalsIgnoreCase(condition.getType())
+                        && "True".equalsIgnoreCase(condition.getStatus()));
+    }
+
+    private void sleepBeforeRetry(String executionId, String jobName, int attempt, Consumer<String> logConsumer) {
+        long retryDelayMillis = Math.max(0, kubernetesProperties.getRetryDelayMillis());
+        if (retryDelayMillis == 0) {
+            return;
+        }
+
+        log.info("[K8S_EXECUTOR] executionId={} jobName={} retrying after attempt={} delay={}ms",
+                executionId, jobName, attempt, retryDelayMillis);
+        logConsumer.accept("K8S_EXECUTOR: retrying after failed attempt " + attempt
+                + " for job " + jobName + " in " + retryDelayMillis + "ms");
+        sleep(retryDelayMillis);
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for Kubernetes Job result", e);
+        }
+    }
+
+    private CodeExecutionResultDTO buildInfrastructureFailure(String submissionId, String executionId, String message) {
+        return CodeExecutionResultDTO.builder()
+                .submissionId(submissionId)
+                .executionId(executionId)
+                .overallStatus(Status.INTERNAL_ERROR)
+                .compilationOutput(message)
+                .testCaseOutputs(List.of())
+                .build();
     }
 
     private String sanitizeLabelValue(String value) {

@@ -16,6 +16,9 @@ public class KubernetesExecutionProperties {
     private long activeDeadlineSeconds = 30;
     private long jobCompletionTimeoutSeconds = 40;
     private long resultPollIntervalMillis = 1000;
+    private int maxAttempts = 2;
+    private long retryDelayMillis = 1000;
+    private int maxPayloadBytes = 65536;
     private Integer ttlSecondsAfterFinished = 120;
     private boolean deleteJobAfterRead = true;
     private Resources resources = new Resources();

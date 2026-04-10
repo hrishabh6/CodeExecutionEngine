@@ -61,6 +61,9 @@ execution:
     active-deadline-seconds: ${KUBERNETES_JOB_ACTIVE_DEADLINE_SECONDS:30}
     job-completion-timeout-seconds: ${KUBERNETES_JOB_COMPLETION_TIMEOUT_SECONDS:40}
     result-poll-interval-millis: ${KUBERNETES_JOB_RESULT_POLL_INTERVAL_MILLIS:1000}
+    max-attempts: ${KUBERNETES_JOB_MAX_ATTEMPTS:2}
+    retry-delay-millis: ${KUBERNETES_JOB_RETRY_DELAY_MILLIS:1000}
+    max-payload-bytes: ${KUBERNETES_JOB_MAX_PAYLOAD_BYTES:65536}
     ttl-seconds-after-finished: ${KUBERNETES_JOB_TTL_SECONDS_AFTER_FINISHED:120}
     delete-job-after-read: ${KUBERNETES_JOB_DELETE_AFTER_READ:true}
     resources:

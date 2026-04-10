@@ -209,9 +209,12 @@ public class ExecutionWorkerService {
 
             // Determine final status based on execution result
             // FAILED = compilation error (system cannot judge)
-            // COMPLETED = code ran (even with runtime errors - these are judgeable)
-            boolean isCompilationError = result.getOverallStatus() == Status.COMPILATON_ERROR;
-            String finalStatus = isCompilationError ? "FAILED" : "COMPLETED";
+            // FAILED = compilation error or infrastructure failure
+            // COMPLETED = code ran (even with runtime errors/timeouts - these are judgeable)
+            boolean isInfrastructureFailure = result.getOverallStatus() == Status.COMPILATON_ERROR
+                    || result.getOverallStatus() == Status.INTERNAL_ERROR
+                    || result.getOverallStatus() == Status.UNKNOWN;
+            String finalStatus = isInfrastructureFailure ? "FAILED" : "COMPLETED";
             String errorCategory = getErrorCategory(result.getOverallStatus());
 
             // Update final status in Redis
