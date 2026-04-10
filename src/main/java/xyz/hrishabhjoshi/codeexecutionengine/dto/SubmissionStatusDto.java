@@ -18,6 +18,11 @@ public class SubmissionStatusDto {
     private String submissionId;
 
     /**
+     * Internal execution identifier for runtime-level tracking.
+     */
+    private String executionId;
+
+    /**
      * Current status (QUEUED, COMPILING, RUNNING, COMPLETED, FAILED)
      */
     private String status;

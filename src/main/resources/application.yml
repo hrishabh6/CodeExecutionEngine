@@ -30,15 +30,20 @@ management:
 # Execution Service Configuration
 execution:
   backend: ${EXECUTION_BACKEND:worker-pod}
+  mode: ${EXECUTION_MODE:worker}
   worker:
     count: ${WORKER_COUNT:5}
     queue-capacity: ${EXECUTION_WORKER_QUEUE_CAPACITY:100}
     timeout-seconds: ${EXECUTION_TIMEOUT_SECONDS:10}
     poll-timeout-seconds: ${EXECUTION_POLL_TIMEOUT_SECONDS:5}
+  job:
+    payload-b64: ${EXECUTION_JOB_PAYLOAD_B64:}
   queue:
     name: execution:queue
     status-prefix: "execution:status"
     status-ttl-seconds: 3600
+    job-result-prefix: "execution:job-result:"
+    job-result-ttl-seconds: ${KUBERNETES_JOB_RESULT_TTL_SECONDS:600}
   runtime:
     compilation-timeout-seconds: ${EXECUTION_COMPILATION_TIMEOUT_SECONDS:30}
     memory-soft-limit-mb: ${EXECUTION_MEMORY_SOFT_LIMIT_MB:256}
@@ -48,6 +53,23 @@ execution:
         run: ${EXECUTION_JAVA_RUN_COMMAND:java}
       python:
         run: ${EXECUTION_PYTHON_RUN_COMMAND:python3}
+  kubernetes:
+    namespace: ${KUBERNETES_NAMESPACE:default}
+    job-image: ${KUBERNETES_JOB_IMAGE:}
+    image-pull-policy: ${KUBERNETES_JOB_IMAGE_PULL_POLICY:IfNotPresent}
+    service-account-name: ${KUBERNETES_SERVICE_ACCOUNT_NAME:}
+    active-deadline-seconds: ${KUBERNETES_JOB_ACTIVE_DEADLINE_SECONDS:30}
+    job-completion-timeout-seconds: ${KUBERNETES_JOB_COMPLETION_TIMEOUT_SECONDS:40}
+    result-poll-interval-millis: ${KUBERNETES_JOB_RESULT_POLL_INTERVAL_MILLIS:1000}
+    ttl-seconds-after-finished: ${KUBERNETES_JOB_TTL_SECONDS_AFTER_FINISHED:120}
+    delete-job-after-read: ${KUBERNETES_JOB_DELETE_AFTER_READ:true}
+    resources:
+      requests:
+        cpu: ${KUBERNETES_JOB_CPU_REQUEST:250m}
+        memory: ${KUBERNETES_JOB_MEMORY_REQUEST:256Mi}
+      limits:
+        cpu: ${KUBERNETES_JOB_CPU_LIMIT:500m}
+        memory: ${KUBERNETES_JOB_MEMORY_LIMIT:256Mi}
 
 # External Services
 services:

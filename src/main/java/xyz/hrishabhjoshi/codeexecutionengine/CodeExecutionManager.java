@@ -30,8 +30,10 @@ public class CodeExecutionManager {
     public CodeExecutionResultDTO runCodeWithTestcases(CodeSubmissionDTO submissionDto, Consumer<String> logConsumer) {
         String submissionId = submissionDto.getSubmissionId() != null ? submissionDto.getSubmissionId()
                 : UUID.randomUUID().toString();
+        String executionId = submissionDto.getExecutionId() != null ? submissionDto.getExecutionId()
+                : UUID.randomUUID().toString();
 
-        log.info("[EXEC_MANAGER] === START runCodeWithTestcases for {} ===", submissionId);
+        log.info("[EXEC_MANAGER] === START runCodeWithTestcases submissionId={} executionId={} ===", submissionId, executionId);
         log.info("[EXEC_MANAGER] language={}, testCases={}", submissionDto.getLanguage(),
                 submissionDto.getTestCases() != null ? submissionDto.getTestCases().size() : 0);
         if (submissionDto.getQuestionMetadata() != null) {
@@ -53,7 +55,7 @@ public class CodeExecutionManager {
 
             // Use system temp directory instead of project root to avoid leftover files
             Path systemTempDir = Paths.get(System.getProperty("java.io.tmpdir"));
-            tempRootPath = Files.createTempDirectory(systemTempDir, "cxe-submission-" + submissionId);
+            tempRootPath = Files.createTempDirectory(systemTempDir, "cxe-exec-" + executionId + "-");
             log.info("[EXEC_MANAGER] Created temp directory: {}", tempRootPath);
 
             log.info("[EXEC_MANAGER] Calling fileGenerator.generateFiles()...");
@@ -70,6 +72,7 @@ public class CodeExecutionManager {
             CodeExecutionResultDTO result = codeExecutor.execute(
                     submissionDto,
                     submissionId,
+                    executionId,
                     tempRootPath,
                     fullyQualifiedMainClass,
                     submissionDto.getLanguage(),
@@ -78,14 +81,16 @@ public class CodeExecutionManager {
             log.info("[EXEC_MANAGER] executeCode returned: status={}, testCaseOutputs={}",
                     result.getOverallStatus(),
                     result.getTestCaseOutputs() != null ? result.getTestCaseOutputs().size() : 0);
-            log.info("[EXEC_MANAGER] === END runCodeWithTestcases for {} ===", submissionId);
+            log.info("[EXEC_MANAGER] === END runCodeWithTestcases submissionId={} executionId={} ===", submissionId, executionId);
 
             return result;
 
         } catch (Exception e) {
             logConsumer.accept("An error occurred: " + e.getMessage());
-            log.error("Execution error for submission {}: {}", submissionId, e.getMessage(), e);
+            log.error("Execution error for submission {} / {}: {}", submissionId, executionId, e.getMessage(), e);
             return CodeExecutionResultDTO.builder()
+                    .submissionId(submissionId)
+                    .executionId(executionId)
                     .overallStatus(Status.INTERNAL_ERROR)
                     .compilationOutput("Error: " + e.getMessage())
                     .build();

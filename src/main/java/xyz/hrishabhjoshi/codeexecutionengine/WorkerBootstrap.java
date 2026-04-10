@@ -20,8 +20,16 @@ public class WorkerBootstrap implements CommandLineRunner {
     @Value("${execution.worker.count:5}")
     private int workerCount;
 
+    @Value("${execution.mode:worker}")
+    private String executionMode;
+
     @Override
     public void run(String... args) {
+        if ("job-runner".equalsIgnoreCase(executionMode)) {
+            log.info("[BOOTSTRAP] execution.mode=job-runner, skipping queue worker bootstrap");
+            return;
+        }
+
         log.info("==============================================");
         log.info("[BOOTSTRAP] Code Execution Engine starting...");
         log.info("[BOOTSTRAP] Configured worker count: {}", workerCount);

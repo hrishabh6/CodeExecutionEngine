@@ -11,6 +11,7 @@ public interface CodeExecutor {
     CodeExecutionResultDTO execute(
             CodeSubmissionDTO submissionDto,
             String submissionId,
+            String executionId,
             Path submissionRootPath,
             String fullyQualifiedMainClass,
             String language,

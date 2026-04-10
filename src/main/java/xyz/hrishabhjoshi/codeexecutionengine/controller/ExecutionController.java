@@ -38,8 +38,8 @@ public class ExecutionController {
                         @RequestBody ExecutionRequest request,
                         HttpServletRequest httpRequest) {
                 log.info("=== [CONTROLLER] POST /submit received ===");
-                log.info("[CONTROLLER] submissionId={}, userId={}, questionId={}, language={}",
-                                request.getSubmissionId(), request.getUserId(), request.getQuestionId(),
+                log.info("[CONTROLLER] submissionId={}, executionId={}, userId={}, questionId={}, language={}",
+                                request.getSubmissionId(), request.getExecutionId(), request.getUserId(), request.getQuestionId(),
                                 request.getLanguage());
                 log.info("[CONTROLLER] code length={}, testCases count={}",
                                 request.getCode() != null ? request.getCode().length() : 0,
@@ -61,8 +61,8 @@ public class ExecutionController {
 
                 // [DEBUG_TRACE] Log raw request details
                 try {
-                        log.info(">>> [DEBUG_TRACE] Raw Request: submissionId={}, language={}, questionId={}",
-                                        request.getSubmissionId(), request.getLanguage(), request.getQuestionId());
+                        log.info(">>> [DEBUG_TRACE] Raw Request: submissionId={}, executionId={}, language={}, questionId={}",
+                                        request.getSubmissionId(), request.getExecutionId(), request.getLanguage(), request.getQuestionId());
                         if (request.getTestCases() != null) {
                                 log.info(">>> [DEBUG_TRACE] Request TestCases count: {}",
                                                 request.getTestCases().size());
@@ -89,7 +89,7 @@ public class ExecutionController {
                 log.info(">>> [DEBUG_TRACE] Enqueuing submission: {}", request.getSubmissionId());
 
                 String submissionId = queueService.enqueue(request);
-                log.info("[CONTROLLER] Enqueued successfully with submissionId={}", submissionId);
+                log.info("[CONTROLLER] Enqueued successfully with submissionId={} executionId={}", submissionId, request.getExecutionId());
 
                 // Get queue stats
                 Long queueSize = queueService.getQueueSize();
@@ -99,6 +99,7 @@ public class ExecutionController {
                 // Build response
                 ExecutionResponse response = ExecutionResponse.builder()
                                 .submissionId(submissionId)
+                                .executionId(request.getExecutionId())
                                 .status("QUEUED")
                                 .message("Submission queued for execution")
                                 .queuePosition(position)

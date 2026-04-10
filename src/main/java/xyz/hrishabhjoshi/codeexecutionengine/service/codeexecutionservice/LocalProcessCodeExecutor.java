@@ -37,12 +37,13 @@ public class LocalProcessCodeExecutor implements CodeExecutor {
     public CodeExecutionResultDTO execute(
             CodeSubmissionDTO submissionDto,
             String submissionId,
+            String executionId,
             Path submissionRootPath,
             String fullyQualifiedMainClass,
             String language,
             Consumer<String> logConsumer) {
 
-        log.info("[CODE_EXECUTOR] === START execute for {} ===", submissionId);
+        log.info("[CODE_EXECUTOR] === START execute submissionId={} executionId={} ===", submissionId, executionId);
         log.info("[CODE_EXECUTOR] language={}, submissionPath={}, mainClass={}",
                 language, submissionRootPath, fullyQualifiedMainClass);
 
@@ -72,10 +73,11 @@ public class LocalProcessCodeExecutor implements CodeExecutor {
             if (!compileResult.isSuccess()) {
                 log.error("[CODE_EXECUTOR] COMPILATION FAILED! Output:\n{}", overallCompilationOutput);
                 return CodeExecutionResultDTO.builder()
-                        .submissionId(submissionId)
-                        .overallStatus(Status.COMPILATON_ERROR)
-                        .compilationOutput(overallCompilationOutput)
-                        .testCaseOutputs(List.of())
+                    .submissionId(submissionId)
+                    .executionId(executionId)
+                    .overallStatus(Status.COMPILATON_ERROR)
+                    .compilationOutput(overallCompilationOutput)
+                    .testCaseOutputs(List.of())
                         .build();
             }
             log.info("[CODE_EXECUTOR] Compilation PASSED");
@@ -112,10 +114,12 @@ public class LocalProcessCodeExecutor implements CodeExecutor {
             }
 
             String combinedOutput = overallCompilationOutput + "\n" + runResult.getRawOutput();
-            log.info("[CODE_EXECUTOR] === END execute for {} === status={}", submissionId, overallStatus);
+            log.info("[CODE_EXECUTOR] === END execute submissionId={} executionId={} status={} ===",
+                    submissionId, executionId, overallStatus);
 
             return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
+                    .executionId(executionId)
                     .overallStatus(overallStatus)
                     .compilationOutput(combinedOutput)
                     .testCaseOutputs(finalTestCaseOutputs)
@@ -126,6 +130,7 @@ public class LocalProcessCodeExecutor implements CodeExecutor {
             e.printStackTrace();
             return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
+                    .executionId(executionId)
                     .overallStatus(Status.INTERNAL_ERROR)
                     .compilationOutput(overallCompilationOutput + "\n" + "Execution runtime orchestration failed: " + e.getMessage())
                     .testCaseOutputs(List.of())

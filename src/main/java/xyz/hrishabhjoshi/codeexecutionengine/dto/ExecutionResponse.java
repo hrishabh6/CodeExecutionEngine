@@ -17,6 +17,11 @@ public class ExecutionResponse {
     private String submissionId;
 
     /**
+     * Unique execution identifier for runtime-level tracking.
+     */
+    private String executionId;
+
+    /**
      * Current status (QUEUED initially)
      */
     private String status;

@@ -101,8 +101,9 @@ public class ExecutionWorkerService {
      */
     private void processSubmission(ExecutionRequest request, String workerId) {
         String submissionId = request.getSubmissionId();
+        String executionId = request.getExecutionId();
         log.info("========================================");
-        log.info("=== [WORKER] {} START processing submission {} ===", workerId, submissionId);
+        log.info("=== [WORKER] {} START processing submission {} execution {} ===", workerId, submissionId, executionId);
         log.info("========================================");
         log.info("[WORKER] {} language={}, questionId={}, code length={}",
                 workerId, request.getLanguage(), request.getQuestionId(),
@@ -135,13 +136,13 @@ public class ExecutionWorkerService {
             // FAIL EARLY: Metadata is required - CXE does not fetch from database
             if (request.getMetadata() == null) {
                 log.error("[WORKER] {} missing metadata for {}", workerId, submissionId);
-                updateStatus(submissionId, "FAILED", workerId, "Missing execution metadata", null);
+                updateStatus(submissionId, executionId, "FAILED", workerId, "Missing execution metadata", null);
                 return;
             }
 
             // Update status to COMPILING
             log.info("[WORKER] {} updating status to COMPILING in Redis", workerId);
-            updateStatus(submissionId, "COMPILING", workerId, null, null);
+            updateStatus(submissionId, executionId, "COMPILING", workerId, null, null);
 
             // Build CodeSubmissionDTO from request
             log.info("[WORKER] {} building CodeSubmissionDTO", workerId);
@@ -175,7 +176,7 @@ public class ExecutionWorkerService {
             log.info("[WORKER] {} calling CodeExecutionManager.runCodeWithTestcases()...", workerId);
             CodeExecutionResultDTO result = codeExecutionManager.runCodeWithTestcases(
                     codeSubmission,
-                    logLine -> log.info("[CXE:{}] {}", submissionId, logLine));
+                    logLine -> log.info("[CXE:{}:{}] {}", submissionId, executionId, logLine));
             log.info("[WORKER] {} execution returned: overallStatus={}, testCaseOutputs count={}",
                     workerId, result.getOverallStatus(),
                     result.getTestCaseOutputs() != null ? result.getTestCaseOutputs().size() : 0);
@@ -215,7 +216,7 @@ public class ExecutionWorkerService {
 
             // Update final status in Redis
             log.info("[WORKER] {} updating final status to {} in Redis", workerId, finalStatus);
-            updateFinalStatus(submissionId, finalStatus, errorCategory, result, testCaseResults,
+            updateFinalStatus(submissionId, executionId, finalStatus, errorCategory, result, testCaseResults,
                     actualRuntimeMs, workerId);
 
             long wallClockTime = System.currentTimeMillis() - startTime;
@@ -226,7 +227,7 @@ public class ExecutionWorkerService {
             // Infrastructure/worker error - FAILED
             log.error("=== [WORKER] {} FAILED {} ===", workerId, submissionId);
             log.error("[WORKER] {} exception: {}", workerId, e.getMessage(), e);
-            updateStatus(submissionId, "FAILED", workerId, e.getMessage(), null);
+            updateStatus(submissionId, executionId, "FAILED", workerId, e.getMessage(), null);
         }
     }
 
@@ -293,6 +294,7 @@ public class ExecutionWorkerService {
 
         CodeSubmissionDTO dto = CodeSubmissionDTO.builder()
                 .submissionId(request.getSubmissionId())
+                .executionId(request.getExecutionId())
                 .language(request.getLanguage())
                 .userSolutionCode(request.getCode())
                 .questionMetadata(questionMeta)
@@ -342,10 +344,11 @@ public class ExecutionWorkerService {
     /**
      * Update submission status in Redis.
      */
-    private void updateStatus(String submissionId, String status, String workerId,
+    private void updateStatus(String submissionId, String executionId, String status, String workerId,
             String errorMessage, List<SubmissionStatusDto.TestCaseResult> testCaseResults) {
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
+                .executionId(executionId)
                 .status(status)
                 .workerId(workerId)
                 .errorMessage(errorMessage)
@@ -361,7 +364,7 @@ public class ExecutionWorkerService {
      * CXE sets verdict=null per oracle-based judging architecture.
      * Only SubmissionService determines verdict by comparing with oracle output.
      */
-    private void updateFinalStatus(String submissionId, String status, String errorCategory,
+    private void updateFinalStatus(String submissionId, String executionId, String status, String errorCategory,
             CodeExecutionResultDTO result,
             List<SubmissionStatusDto.TestCaseResult> testCaseResults,
             int runtimeMs, String workerId) {
@@ -383,6 +386,7 @@ public class ExecutionWorkerService {
 
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
+                .executionId(executionId)
                 .status(status) // COMPLETED or FAILED
                 .verdict(null) // ALWAYS NULL - SubmissionService determines verdict
                 .runtimeMs(runtimeMs)

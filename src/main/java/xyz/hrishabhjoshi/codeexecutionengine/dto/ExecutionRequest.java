@@ -19,6 +19,11 @@ public class ExecutionRequest {
     private String submissionId;
 
     /**
+     * Internal execution identifier for distributed execution tracking.
+     */
+    private String executionId;
+
+    /**
      * User who is submitting the code
      */
     private String userId;
