@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 spring:
   application:
@@ -8,9 +8,9 @@ spring:
   # Redis Configuration
   data:
     redis:
-      host: localhost
-      port: 6379
-      timeout: 5000ms
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:5000ms}
 
 
 # Actuator Configuration
@@ -31,22 +31,22 @@ management:
 execution:
   worker:
     count: ${WORKER_COUNT:5}
-    timeout-seconds: 10
-    poll-timeout-seconds: 5
+    timeout-seconds: ${EXECUTION_TIMEOUT_SECONDS:10}
+    poll-timeout-seconds: ${EXECUTION_POLL_TIMEOUT_SECONDS:5}
   queue:
     name: execution:queue
     status-prefix: "execution:status"
     status-ttl-seconds: 3600
   docker:
-    java-image: hrishabhjoshi/my-java-runtime:17
-    python-image: hrishabhjoshi/python-runtime:3.9
-    memory-limit: 256m
-    cpu-limit: 0.5
+    java-image: ${CXE_JAVA_RUNTIME_IMAGE:hrishabhjoshi/my-java-runtime:17}
+    python-image: ${CXE_PYTHON_RUNTIME_IMAGE:hrishabhjoshi/python-runtime:3.9}
+    memory-limit: ${CXE_DOCKER_MEMORY_LIMIT:256m}
+    cpu-limit: ${CXE_DOCKER_CPU_LIMIT:0.5}
 
 # External Services
 services:
   problem:
-    base-url: ${PROBLEM_SERVICE_URL:http://localhost:8084}
+    base-url: ${PROBLEM_SERVICE_URL:http://problem-service:8084}
 
 # Logging
 logging:
