@@ -1,5 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CompilationResult;
@@ -9,10 +11,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.service.compilation.CompilationServ
 import xyz.hrishabhjoshi.codeexecutionengine.service.execution.ExecutionService;
 import xyz.hrishabhjoshi.codeexecutionengine.service.factory.CompilationServiceFactory;
 import xyz.hrishabhjoshi.codeexecutionengine.service.factory.ExecutionServiceFactory;
-import org.springframework.stereotype.Service;
-import lombok.extern.slf4j.Slf4j;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -21,12 +20,12 @@ import java.util.function.Consumer;
 
 @Slf4j
 @Service
-public class CodeExecutorService {
+public class LocalProcessCodeExecutor implements CodeExecutor {
 
     private final CompilationServiceFactory compilationFactory;
     private final ExecutionServiceFactory executionFactory;
 
-    public CodeExecutorService(
+    public LocalProcessCodeExecutor(
             CompilationServiceFactory compilationFactory,
             ExecutionServiceFactory executionFactory
     ) {
@@ -34,7 +33,8 @@ public class CodeExecutorService {
         this.executionFactory = executionFactory;
     }
 
-    public CodeExecutionResultDTO executeCode(
+    @Override
+    public CodeExecutionResultDTO execute(
             CodeSubmissionDTO submissionDto,
             String submissionId,
             Path submissionRootPath,
@@ -42,22 +42,9 @@ public class CodeExecutorService {
             String language,
             Consumer<String> logConsumer) {
 
-        log.info("[CODE_EXECUTOR] === START executeCode for {} ===", submissionId);
+        log.info("[CODE_EXECUTOR] === START execute for {} ===", submissionId);
         log.info("[CODE_EXECUTOR] language={}, submissionPath={}, mainClass={}",
                 language, submissionRootPath, fullyQualifiedMainClass);
-
-        // Validate submission path
-        File submissionDir = submissionRootPath.toFile();
-        if (!submissionDir.exists() || !submissionDir.isDirectory()) {
-            log.error("[CODE_EXECUTOR] Submission directory not found: {}", submissionRootPath);
-            return CodeExecutionResultDTO.builder()
-                    .submissionId(submissionId)
-                    .overallStatus(Status.INTERNAL_ERROR)
-                    .compilationOutput("Submission directory not found or not a directory: " + submissionRootPath)
-                    .testCaseOutputs(List.of())
-                    .build();
-        }
-        log.info("[CODE_EXECUTOR] Submission directory validated: {}", submissionRootPath);
 
         String overallCompilationOutput = "";
         CompilationService compilationService = compilationFactory.getService(language);
@@ -68,7 +55,6 @@ public class CodeExecutorService {
         List<CodeExecutionResultDTO.TestCaseOutput> finalTestCaseOutputs = new ArrayList<>();
 
         try {
-            // --- Step 1: Compile Code ---
             String fullyQualifiedPackageName = submissionDto.getQuestionMetadata().getFullyQualifiedPackageName();
             log.info("[CODE_EXECUTOR] === STEP 1: COMPILATION === package={}", fullyQualifiedPackageName);
 
@@ -94,7 +80,6 @@ public class CodeExecutorService {
             }
             log.info("[CODE_EXECUTOR] Compilation PASSED");
 
-            // --- Step 2: Execute Code ---
             log.info("[CODE_EXECUTOR] === STEP 2: EXECUTION === mainClass={}", fullyQualifiedMainClass);
             ExecutionResult runResult = executionService.run(submissionId, submissionRootPath, fullyQualifiedMainClass, logConsumer);
             log.info("[CODE_EXECUTOR] Execution complete: timedOut={}, exitCode={}, testCaseOutputs={}",
@@ -111,7 +96,6 @@ public class CodeExecutorService {
             }
             log.info("[CODE_EXECUTOR] Determined overallStatus={}", overallStatus);
 
-            // Map test case outputs
             log.info("[CODE_EXECUTOR] === STEP 3: MAPPING TEST CASE RESULTS ===");
             for (ExecutionResult.TestCaseOutput tcOutput : runResult.getTestCaseOutputs()) {
                 log.info("[CODE_EXECUTOR] Mapping testCase[{}]: output='{}', timeMs={}, memBytes={}, error={}",
@@ -128,7 +112,7 @@ public class CodeExecutorService {
             }
 
             String combinedOutput = overallCompilationOutput + "\n" + runResult.getRawOutput();
-            log.info("[CODE_EXECUTOR] === END executeCode for {} === status={}", submissionId, overallStatus);
+            log.info("[CODE_EXECUTOR] === END execute for {} === status={}", submissionId, overallStatus);
 
             return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
@@ -143,7 +127,7 @@ public class CodeExecutorService {
             return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
                     .overallStatus(Status.INTERNAL_ERROR)
-                    .compilationOutput(overallCompilationOutput + "\n" + "Orchestration/Docker communication failed: " + e.getMessage())
+                    .compilationOutput(overallCompilationOutput + "\n" + "Execution runtime orchestration failed: " + e.getMessage())
                     .testCaseOutputs(List.of())
                     .build();
         }

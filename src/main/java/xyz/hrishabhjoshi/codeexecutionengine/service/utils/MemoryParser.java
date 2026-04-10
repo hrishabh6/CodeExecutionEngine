@@ -4,7 +4,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Utility to parse Docker stats memory output and convert between units.
+ * Utility to parse memory strings and convert between units.
  * Handles formats like "12.45MiB / 256MiB" or "1.2GiB / 2GiB".
  */
 public class MemoryParser {
@@ -13,7 +13,7 @@ public class MemoryParser {
     private static final Pattern MEMORY_PATTERN = Pattern.compile("([0-9.]+)(\\w+)\\s*/\\s*([0-9.]+)(\\w+)");
 
     /**
-     * Parse Docker stats memory string to bytes.
+     * Parse a memory string to bytes.
      * 
      * @param memoryStats String like "12.45MiB / 256MiB"
      * @return Peak memory in bytes, or null if parsing fails

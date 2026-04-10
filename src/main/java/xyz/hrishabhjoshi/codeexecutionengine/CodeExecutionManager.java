@@ -3,7 +3,7 @@ package xyz.hrishabhjoshi.codeexecutionengine;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.Status;
-import xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice.CodeExecutorService;
+import xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice.CodeExecutor;
 import xyz.hrishabhjoshi.codeexecutionengine.service.factory.FileGeneratorFactory;
 import xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.FileGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +22,7 @@ import java.util.stream.Stream;
 public class CodeExecutionManager {
 
     @Autowired
-    private CodeExecutorService codeExecutionService;
+    private CodeExecutor codeExecutor;
 
     @Autowired
     private FileGeneratorFactory fileGeneratorFactory;
@@ -66,8 +66,8 @@ public class CodeExecutionManager {
                     + ".Main";
             log.info("[EXEC_MANAGER] Main class: {}", fullyQualifiedMainClass);
 
-            log.info("[EXEC_MANAGER] Calling codeExecutionService.executeCode()...");
-            CodeExecutionResultDTO result = codeExecutionService.executeCode(
+            log.info("[EXEC_MANAGER] Calling codeExecutor.execute()...");
+            CodeExecutionResultDTO result = codeExecutor.execute(
                     submissionDto,
                     submissionId,
                     tempRootPath,

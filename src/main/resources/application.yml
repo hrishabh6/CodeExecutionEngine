@@ -19,9 +19,9 @@ management:
     web:
       exposure:
         include: health,metrics,prometheus,info
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
   endpoint:
     health:
@@ -29,19 +29,25 @@ management:
 
 # Execution Service Configuration
 execution:
+  backend: ${EXECUTION_BACKEND:worker-pod}
   worker:
     count: ${WORKER_COUNT:5}
+    queue-capacity: ${EXECUTION_WORKER_QUEUE_CAPACITY:100}
     timeout-seconds: ${EXECUTION_TIMEOUT_SECONDS:10}
     poll-timeout-seconds: ${EXECUTION_POLL_TIMEOUT_SECONDS:5}
   queue:
     name: execution:queue
     status-prefix: "execution:status"
     status-ttl-seconds: 3600
-  docker:
-    java-image: ${CXE_JAVA_RUNTIME_IMAGE:hrishabhjoshi/my-java-runtime:17}
-    python-image: ${CXE_PYTHON_RUNTIME_IMAGE:hrishabhjoshi/python-runtime:3.9}
-    memory-limit: ${CXE_DOCKER_MEMORY_LIMIT:256m}
-    cpu-limit: ${CXE_DOCKER_CPU_LIMIT:0.5}
+  runtime:
+    compilation-timeout-seconds: ${EXECUTION_COMPILATION_TIMEOUT_SECONDS:30}
+    memory-soft-limit-mb: ${EXECUTION_MEMORY_SOFT_LIMIT_MB:256}
+    languages:
+      java:
+        compile: ${EXECUTION_JAVA_COMPILE_COMMAND:javac}
+        run: ${EXECUTION_JAVA_RUN_COMMAND:java}
+      python:
+        run: ${EXECUTION_PYTHON_RUN_COMMAND:python3}
 
 # External Services
 services:

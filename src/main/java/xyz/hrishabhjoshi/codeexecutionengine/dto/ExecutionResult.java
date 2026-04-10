@@ -12,7 +12,7 @@ public class ExecutionResult {
     private String rawOutput; // Full stdout/stderr from execution
     private List<ExecutionResult.TestCaseOutput> testCaseOutputs; // Renamed to clearly indicate it's raw output
     private boolean timedOut; // True if execution timed out
-    private int exitCode; // Exit code of the Java process in Docker
+    private int exitCode; // Exit code of the underlying execution process
 
     /**
      * Represents the raw output collected for a single test case.
