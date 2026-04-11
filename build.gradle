@@ -42,6 +42,9 @@ dependencies {
     implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'io.fabric8:kubernetes-client:6.13.4'
 
+    implementation platform("io.fabric8:kubernetes-client-bom:6.13.5")
+    implementation "io.fabric8:kubernetes-client"
+
     // JSON Processing
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 

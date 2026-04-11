@@ -9,7 +9,7 @@ spring:
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:redis}
-      port: ${SPRING_DATA_REDIS_PORT}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
       timeout: ${SPRING_DATA_REDIS_TIMEOUT:5000ms}
 
 

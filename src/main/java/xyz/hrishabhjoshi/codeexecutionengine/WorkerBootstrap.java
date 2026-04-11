@@ -23,8 +23,16 @@ public class WorkerBootstrap implements CommandLineRunner {
     @Value("${execution.mode:worker}")
     private String executionMode;
 
+    @Value("${execution.worker.bootstrap-enabled:true}")
+    private boolean bootstrapEnabled;
+
     @Override
     public void run(String... args) {
+        if (!bootstrapEnabled) {
+            log.info("[BOOTSTRAP] execution.worker.bootstrap-enabled=false, skipping queue worker bootstrap");
+            return;
+        }
+
         if ("job-runner".equalsIgnoreCase(executionMode)) {
             log.info("[BOOTSTRAP] execution.mode=job-runner, skipping queue worker bootstrap");
             return;

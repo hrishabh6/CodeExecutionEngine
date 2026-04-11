@@ -1,0 +1,18 @@
+execution:
+  worker:
+    bootstrap-enabled: false
+  mode: worker
+  runtime:
+    compilation-timeout-seconds: 30
+    languages:
+      java:
+        compile: javac
+        run: java
+      python:
+        run: python3
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
