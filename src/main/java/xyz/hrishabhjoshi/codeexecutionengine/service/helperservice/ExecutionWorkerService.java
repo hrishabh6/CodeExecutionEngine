@@ -1,7 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service.helperservice;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -23,12 +23,22 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ExecutionWorkerService {
 
     private final ExecutionQueueService queueService;
     private final CodeExecutionManager codeExecutionManager;
     private final ObjectMapper objectMapper;
+
+    /** Volatile flag to signal all workers to stop gracefully on shutdown. */
+    private volatile boolean running = true;
+
+    public ExecutionWorkerService(ExecutionQueueService queueService,
+                                  CodeExecutionManager codeExecutionManager,
+                                  ObjectMapper objectMapper) {
+        this.queueService = queueService;
+        this.codeExecutionManager = codeExecutionManager;
+        this.objectMapper = objectMapper;
+    }
 
     @Value("${execution.worker.poll-timeout-seconds:5}")
     private long pollTimeoutSeconds;
@@ -38,6 +48,12 @@ public class ExecutionWorkerService {
 
     public static int getActiveWorkerCount() {
         return activeWorkers.get();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        log.info("[WORKER] Shutdown signal received — stopping all workers");
+        running = false;
     }
 
     /**
@@ -55,7 +71,7 @@ public class ExecutionWorkerService {
 
         int pollCount = 0;
         try {
-            while (!Thread.currentThread().isInterrupted()) {
+            while (running && !Thread.currentThread().isInterrupted()) {
                 try {
                     pollCount++;
                     if (pollCount % 10 == 1) { // Log every 10th poll to avoid spam
@@ -69,7 +85,15 @@ public class ExecutionWorkerService {
                         log.info("[WORKER] {} received job submissionId={}", workerId, request.getSubmissionId());
                         processSubmission(request, workerId);
                     }
+                } catch (IllegalStateException e) {
+                    // LettuceConnectionFactory stopped — Spring is shutting down
+                    log.info("[WORKER] {} Redis connection closed, shutting down gracefully", workerId);
+                    break;
                 } catch (Exception e) {
+                    if (!running) {
+                        log.info("[WORKER] {} stopping due to shutdown", workerId);
+                        break;
+                    }
                     log.error("[WORKER] {} error during poll/process: {}", workerId, e.getMessage(), e);
                     // Continue processing - don't let one error stop the worker
                 }
