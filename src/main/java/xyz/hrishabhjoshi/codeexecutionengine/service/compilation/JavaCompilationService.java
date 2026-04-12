@@ -44,7 +44,9 @@ public class JavaCompilationService implements CompilationService {
         command.add("-d");
         command.add(submissionPath.toAbsolutePath().toString());
         command.add("-cp");
-        command.add(submissionPath.toAbsolutePath().toString());
+        // Include submission path + extracted Jackson JARs needed by generated Main.java
+        command.add(submissionPath.toAbsolutePath().toString()
+                + ":/app/libs/*");
         command.addAll(javaFiles);
 
         ManagedProcessRunner.ProcessExecutionResult result = processRunner.run(
@@ -52,7 +54,8 @@ public class JavaCompilationService implements CompilationService {
                 submissionPath,
                 logConsumer,
                 runtimeProperties.getCompilationTimeoutSeconds(),
-                "COMPILE_SERVICE_LOG");
+                "COMPILE_SERVICE_LOG",
+                true);  // skip memory limit for compiler (trusted code)
 
         String compilationOutput = result.output();
 

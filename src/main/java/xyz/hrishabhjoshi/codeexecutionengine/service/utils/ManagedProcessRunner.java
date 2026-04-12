@@ -6,10 +6,12 @@ import org.springframework.stereotype.Component;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 @Component
@@ -24,13 +26,25 @@ public class ManagedProcessRunner {
             Consumer<String> logConsumer,
             long timeoutSeconds,
             String logPrefix) throws IOException, InterruptedException {
+        return run(command, workingDirectory, logConsumer, timeoutSeconds, logPrefix, false);
+    }
 
-        ProcessBuilder processBuilder = new ProcessBuilder(applySoftMemoryLimit(command));
+    public ProcessExecutionResult run(
+            List<String> command,
+            Path workingDirectory,
+            Consumer<String> logConsumer,
+            long timeoutSeconds,
+            String logPrefix,
+            boolean skipMemoryLimit) throws IOException, InterruptedException {
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                skipMemoryLimit ? command : applySoftMemoryLimit(command));
         processBuilder.directory(workingDirectory.toFile());
         processBuilder.redirectErrorStream(true);
 
         Process process = processBuilder.start();
         StringBuilder output = new StringBuilder();
+        AtomicLong peakMemoryBytes = new AtomicLong(0);
 
         Thread outputReader = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -46,6 +60,30 @@ public class ManagedProcessRunner {
         outputReader.setDaemon(true);
         outputReader.start();
 
+        // Monitor peak RSS memory of the child process
+        long pid = process.pid();
+        Thread memoryMonitor = new Thread(() -> {
+            Path statusPath = Path.of("/proc/" + pid + "/status");
+            while (process.isAlive()) {
+                try {
+                    List<String> lines = Files.readAllLines(statusPath);
+                    for (String l : lines) {
+                        if (l.startsWith("VmRSS:")) {
+                            String kb = l.replaceAll("[^0-9]", "");
+                            long bytes = Long.parseLong(kb) * 1024;
+                            peakMemoryBytes.updateAndGet(prev -> Math.max(prev, bytes));
+                            break;
+                        }
+                    }
+                    Thread.sleep(100);
+                } catch (Exception ignored) {
+                    break;
+                }
+            }
+        }, "memory-monitor-" + pid);
+        memoryMonitor.setDaemon(true);
+        memoryMonitor.start();
+
         boolean timedOut = !process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         int exitCode;
 
@@ -58,8 +96,9 @@ public class ManagedProcessRunner {
         }
 
         outputReader.join(2000);
+        memoryMonitor.join(500);
 
-        return new ProcessExecutionResult(output.toString(), exitCode, timedOut);
+        return new ProcessExecutionResult(output.toString(), exitCode, timedOut, peakMemoryBytes.get());
     }
 
     private List<String> applySoftMemoryLimit(List<String> command) {
@@ -120,6 +159,6 @@ public class ManagedProcessRunner {
         return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 
-    public record ProcessExecutionResult(String output, int exitCode, boolean timedOut) {
+    public record ProcessExecutionResult(String output, int exitCode, boolean timedOut, long peakMemoryBytes) {
     }
 }

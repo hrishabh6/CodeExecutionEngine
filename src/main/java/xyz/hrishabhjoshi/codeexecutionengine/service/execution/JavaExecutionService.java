@@ -36,7 +36,9 @@ public class JavaExecutionService implements ExecutionService {
 
         List<String> command = new ArrayList<>(runtimeProperties.getRequiredLanguageRuntime("java").runCommandTokens());
         command.add("-cp");
-        command.add(submissionPath.toAbsolutePath().toString());
+        // Include submission path + extracted Jackson JARs needed by generated Main.java
+        command.add(submissionPath.toAbsolutePath().toString()
+                + ":/app/libs/*");
         command.add(fullyQualifiedMainClass);
 
         ManagedProcessRunner.ProcessExecutionResult result = processRunner.run(
@@ -44,7 +46,8 @@ public class JavaExecutionService implements ExecutionService {
                 submissionPath,
                 logConsumer,
                 executionTimeoutSeconds,
-                "EXECUTION_SERVICE_LOG");
+                "EXECUTION_SERVICE_LOG",
+                true);  // skip ulimit for JVM - use timeout as safety instead
 
         if (result.timedOut()) {
             logConsumer.accept("EXECUTION_SERVICE: Execution timed out after " + executionTimeoutSeconds + " seconds.");
@@ -53,7 +56,8 @@ public class JavaExecutionService implements ExecutionService {
         }
 
         List<ExecutionResult.TestCaseOutput> testCaseOutputs = new ArrayList<>();
-        parseExecutionOutputForResults(result.output(), testCaseOutputs, null, logConsumer);
+        Long peakMemory = result.peakMemoryBytes() > 0 ? result.peakMemoryBytes() : null;
+        parseExecutionOutputForResults(result.output(), testCaseOutputs, peakMemory, logConsumer);
 
         return ExecutionResult.builder()
                 .rawOutput(result.output())

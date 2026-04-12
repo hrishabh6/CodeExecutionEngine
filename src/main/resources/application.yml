@@ -49,8 +49,8 @@ execution:
     memory-soft-limit-mb: ${EXECUTION_MEMORY_SOFT_LIMIT_MB:256}
     languages:
       java:
-        compile: ${EXECUTION_JAVA_COMPILE_COMMAND:javac}
-        run: ${EXECUTION_JAVA_RUN_COMMAND:java}
+        compile: ${EXECUTION_JAVA_COMPILE_COMMAND:javac -J-XX:ReservedCodeCacheSize=64m -J-Xmx128m}
+        run: ${EXECUTION_JAVA_RUN_COMMAND:java -XX:ReservedCodeCacheSize=64m -Xmx128m}
       python:
         run: ${EXECUTION_PYTHON_RUN_COMMAND:python3}
   kubernetes:
