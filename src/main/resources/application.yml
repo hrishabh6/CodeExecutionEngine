@@ -47,6 +47,7 @@ execution:
   runtime:
     compilation-timeout-seconds: ${EXECUTION_COMPILATION_TIMEOUT_SECONDS:30}
     memory-soft-limit-mb: ${EXECUTION_MEMORY_SOFT_LIMIT_MB:256}
+    extra-classpath: ${EXECUTION_EXTRA_CLASSPATH:}
     languages:
       java:
         compile: ${EXECUTION_JAVA_COMPILE_COMMAND:javac -J-XX:ReservedCodeCacheSize=64m -J-Xmx128m}

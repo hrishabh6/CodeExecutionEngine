@@ -36,9 +36,13 @@ public class JavaExecutionService implements ExecutionService {
 
         List<String> command = new ArrayList<>(runtimeProperties.getRequiredLanguageRuntime("java").runCommandTokens());
         command.add("-cp");
-        // Include submission path + extracted Jackson JARs needed by generated Main.java
-        command.add(submissionPath.toAbsolutePath().toString()
-                + ":/app/libs/*");
+        // Include submission path + extra classpath (Jackson JARs - auto-resolved or from env var)
+        String classpath = submissionPath.toAbsolutePath().toString();
+        String extraCp = runtimeProperties.getResolvedExtraClasspath();
+        if (!extraCp.isEmpty()) {
+            classpath += ":" + extraCp;
+        }
+        command.add(classpath);
         command.add(fullyQualifiedMainClass);
 
         ManagedProcessRunner.ProcessExecutionResult result = processRunner.run(
