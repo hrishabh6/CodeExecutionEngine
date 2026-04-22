@@ -1,7 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service.helperservice;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -23,12 +23,22 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ExecutionWorkerService {
 
     private final ExecutionQueueService queueService;
     private final CodeExecutionManager codeExecutionManager;
     private final ObjectMapper objectMapper;
+
+    /** Volatile flag to signal all workers to stop gracefully on shutdown. */
+    private volatile boolean running = true;
+
+    public ExecutionWorkerService(ExecutionQueueService queueService,
+                                  CodeExecutionManager codeExecutionManager,
+                                  ObjectMapper objectMapper) {
+        this.queueService = queueService;
+        this.codeExecutionManager = codeExecutionManager;
+        this.objectMapper = objectMapper;
+    }
 
     @Value("${execution.worker.poll-timeout-seconds:5}")
     private long pollTimeoutSeconds;
@@ -38,6 +48,12 @@ public class ExecutionWorkerService {
 
     public static int getActiveWorkerCount() {
         return activeWorkers.get();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        log.info("[WORKER] Shutdown signal received — stopping all workers");
+        running = false;
     }
 
     /**
@@ -55,7 +71,7 @@ public class ExecutionWorkerService {
 
         int pollCount = 0;
         try {
-            while (!Thread.currentThread().isInterrupted()) {
+            while (running && !Thread.currentThread().isInterrupted()) {
                 try {
                     pollCount++;
                     if (pollCount % 10 == 1) { // Log every 10th poll to avoid spam
@@ -69,7 +85,15 @@ public class ExecutionWorkerService {
                         log.info("[WORKER] {} received job submissionId={}", workerId, request.getSubmissionId());
                         processSubmission(request, workerId);
                     }
+                } catch (IllegalStateException e) {
+                    // LettuceConnectionFactory stopped — Spring is shutting down
+                    log.info("[WORKER] {} Redis connection closed, shutting down gracefully", workerId);
+                    break;
                 } catch (Exception e) {
+                    if (!running) {
+                        log.info("[WORKER] {} stopping due to shutdown", workerId);
+                        break;
+                    }
                     log.error("[WORKER] {} error during poll/process: {}", workerId, e.getMessage(), e);
                     // Continue processing - don't let one error stop the worker
                 }
@@ -101,8 +125,9 @@ public class ExecutionWorkerService {
      */
     private void processSubmission(ExecutionRequest request, String workerId) {
         String submissionId = request.getSubmissionId();
+        String executionId = request.getExecutionId();
         log.info("========================================");
-        log.info("=== [WORKER] {} START processing submission {} ===", workerId, submissionId);
+        log.info("=== [WORKER] {} START processing submission {} execution {} ===", workerId, submissionId, executionId);
         log.info("========================================");
         log.info("[WORKER] {} language={}, questionId={}, code length={}",
                 workerId, request.getLanguage(), request.getQuestionId(),
@@ -135,13 +160,13 @@ public class ExecutionWorkerService {
             // FAIL EARLY: Metadata is required - CXE does not fetch from database
             if (request.getMetadata() == null) {
                 log.error("[WORKER] {} missing metadata for {}", workerId, submissionId);
-                updateStatus(submissionId, "FAILED", workerId, "Missing execution metadata", null);
+                updateStatus(submissionId, executionId, "FAILED", workerId, "Missing execution metadata", null);
                 return;
             }
 
             // Update status to COMPILING
             log.info("[WORKER] {} updating status to COMPILING in Redis", workerId);
-            updateStatus(submissionId, "COMPILING", workerId, null, null);
+            updateStatus(submissionId, executionId, "COMPILING", workerId, null, null);
 
             // Build CodeSubmissionDTO from request
             log.info("[WORKER] {} building CodeSubmissionDTO", workerId);
@@ -175,7 +200,7 @@ public class ExecutionWorkerService {
             log.info("[WORKER] {} calling CodeExecutionManager.runCodeWithTestcases()...", workerId);
             CodeExecutionResultDTO result = codeExecutionManager.runCodeWithTestcases(
                     codeSubmission,
-                    logLine -> log.info("[CXE:{}] {}", submissionId, logLine));
+                    logLine -> log.info("[CXE:{}:{}] {}", submissionId, executionId, logLine));
             log.info("[WORKER] {} execution returned: overallStatus={}, testCaseOutputs count={}",
                     workerId, result.getOverallStatus(),
                     result.getTestCaseOutputs() != null ? result.getTestCaseOutputs().size() : 0);
@@ -208,14 +233,17 @@ public class ExecutionWorkerService {
 
             // Determine final status based on execution result
             // FAILED = compilation error (system cannot judge)
-            // COMPLETED = code ran (even with runtime errors - these are judgeable)
-            boolean isCompilationError = result.getOverallStatus() == Status.COMPILATON_ERROR;
-            String finalStatus = isCompilationError ? "FAILED" : "COMPLETED";
+            // FAILED = compilation error or infrastructure failure
+            // COMPLETED = code ran (even with runtime errors/timeouts - these are judgeable)
+            boolean isInfrastructureFailure = result.getOverallStatus() == Status.COMPILATON_ERROR
+                    || result.getOverallStatus() == Status.INTERNAL_ERROR
+                    || result.getOverallStatus() == Status.UNKNOWN;
+            String finalStatus = isInfrastructureFailure ? "FAILED" : "COMPLETED";
             String errorCategory = getErrorCategory(result.getOverallStatus());
 
             // Update final status in Redis
             log.info("[WORKER] {} updating final status to {} in Redis", workerId, finalStatus);
-            updateFinalStatus(submissionId, finalStatus, errorCategory, result, testCaseResults,
+            updateFinalStatus(submissionId, executionId, finalStatus, errorCategory, result, testCaseResults,
                     actualRuntimeMs, workerId);
 
             long wallClockTime = System.currentTimeMillis() - startTime;
@@ -226,7 +254,7 @@ public class ExecutionWorkerService {
             // Infrastructure/worker error - FAILED
             log.error("=== [WORKER] {} FAILED {} ===", workerId, submissionId);
             log.error("[WORKER] {} exception: {}", workerId, e.getMessage(), e);
-            updateStatus(submissionId, "FAILED", workerId, e.getMessage(), null);
+            updateStatus(submissionId, executionId, "FAILED", workerId, e.getMessage(), null);
         }
     }
 
@@ -293,6 +321,7 @@ public class ExecutionWorkerService {
 
         CodeSubmissionDTO dto = CodeSubmissionDTO.builder()
                 .submissionId(request.getSubmissionId())
+                .executionId(request.getExecutionId())
                 .language(request.getLanguage())
                 .userSolutionCode(request.getCode())
                 .questionMetadata(questionMeta)
@@ -342,10 +371,11 @@ public class ExecutionWorkerService {
     /**
      * Update submission status in Redis.
      */
-    private void updateStatus(String submissionId, String status, String workerId,
+    private void updateStatus(String submissionId, String executionId, String status, String workerId,
             String errorMessage, List<SubmissionStatusDto.TestCaseResult> testCaseResults) {
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
+                .executionId(executionId)
                 .status(status)
                 .workerId(workerId)
                 .errorMessage(errorMessage)
@@ -361,7 +391,7 @@ public class ExecutionWorkerService {
      * CXE sets verdict=null per oracle-based judging architecture.
      * Only SubmissionService determines verdict by comparing with oracle output.
      */
-    private void updateFinalStatus(String submissionId, String status, String errorCategory,
+    private void updateFinalStatus(String submissionId, String executionId, String status, String errorCategory,
             CodeExecutionResultDTO result,
             List<SubmissionStatusDto.TestCaseResult> testCaseResults,
             int runtimeMs, String workerId) {
@@ -383,6 +413,7 @@ public class ExecutionWorkerService {
 
         SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
                 .submissionId(submissionId)
+                .executionId(executionId)
                 .status(status) // COMPLETED or FAILED
                 .verdict(null) // ALWAYS NULL - SubmissionService determines verdict
                 .runtimeMs(runtimeMs)

@@ -9,14 +9,15 @@ public interface ExecutionService {
     String getLanguage(); // "java", "cpp"
 
     /**
-     * Executes compiled Java code (Main.class) located at the given submissionPath using Docker.
+     * Executes code located at the given submissionPath inside the current worker
+     * runtime.
      *
      * @param submissionId     The unique ID for the submission.
-     * @param submissionPath   The absolute path to the directory containing the compiled .class files.
+     * @param submissionPath   The absolute path to the generated submission workspace.
      * @param fullyQualifiedMainClass The fully qualified name of the Main class (e.g., "mycode.Main").
-     * @param logConsumer      A consumer to handle real-time log lines from Docker during execution.
+     * @param logConsumer      A consumer to handle real-time process log lines.
      * @return An ExecutionResult object containing execution logs and test case outputs.
-     * @throws IOException If an I/O error occurs (e.g., Docker not running).
+     * @throws IOException If an I/O error occurs while starting the execution process.
      * @throws InterruptedException If the process is interrupted.
      */
     ExecutionResult run(String submissionId, Path submissionPath, String fullyQualifiedMainClass, Consumer<String> logConsumer) throws IOException, InterruptedException;

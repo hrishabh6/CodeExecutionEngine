@@ -12,6 +12,7 @@ import java.util.Map;
 public class CodeSubmissionDTO {
 
     private String submissionId;
+    private String executionId;
     private String language;
     private String userSolutionCode;
     private QuestionMetadata questionMetadata;

@@ -60,17 +60,27 @@ public class ExecutionQueueService {
             log.info("[QUEUE] Using provided submissionId={}", submissionId);
         }
 
+        String executionId = request.getExecutionId();
+        if (executionId == null || executionId.isEmpty()) {
+            executionId = UUID.randomUUID().toString();
+            request.setExecutionId(executionId);
+            log.info("[QUEUE] Generated new executionId={}", executionId);
+        } else {
+            log.info("[QUEUE] Using provided executionId={}", executionId);
+        }
+
         // Set initial status in Redis (fast polling)
         log.info("[QUEUE] Setting initial QUEUED status in Redis...");
         setRedisStatus(submissionId, SubmissionStatusDto.builder()
                 .submissionId(submissionId)
+                .executionId(executionId)
                 .status("QUEUED")
                 .queuedAt(System.currentTimeMillis())
                 .build());
         log.info("[QUEUE] Redis status set successfully");
 
         // Add to queue (LPUSH = left push, workers BRPOP from right)
-        log.info("[QUEUE] LPUSH to queue '{}' for submissionId={}", queueName, submissionId);
+        log.info("[QUEUE] LPUSH to queue '{}' for submissionId={} executionId={}", queueName, submissionId, executionId);
         redisTemplate.opsForList().leftPush(queueName, request);
 
         Long queueSize = redisTemplate.opsForList().size(queueName);
