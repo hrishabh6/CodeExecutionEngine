@@ -18,14 +18,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,prometheus,info
+        include: health,prometheus
   prometheus:
     metrics:
       export:
         enabled: true
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
 
 # Execution Service Configuration
 execution:
@@ -83,7 +83,7 @@ services:
 # Logging
 logging:
   level:
-    xyz.hrishabhjoshi.codeexecutionengine: DEBUG
+    xyz.hrishabhjoshi.codeexecutionengine: INFO
     org.springframework.data.redis: WARN
     org.springframework.data.redis.core.RedisConnectionUtils: WARN
     io.lettuce: WARN

@@ -17,7 +17,6 @@ public class InputVariableGenerator {
     public static void generateInputVariableDeclarations(StringBuilder builder, QuestionMetadata metadata,
             String inputJson, int testCaseIndex) throws JsonProcessingException {
         log.debug("[InputVarGen] Generating variables for testCase {}", testCaseIndex);
-        log.debug("[InputVarGen] inputJson = {}", inputJson);
 
         JsonNode inputNode = objectMapper.readTree(inputJson);
         List<ParamInfoDTO> parameters = metadata.getParameters();
@@ -90,12 +89,6 @@ public class InputVariableGenerator {
             JsonNode paramValueNode, QuestionMetadata metadata, int testCaseIndex) throws JsonProcessingException {
         String declarationValue = ValueDeclarationGenerator.generateValueDeclaration(paramType, paramValueNode,
                 metadata.getCustomDataStructureNames());
-
-        // [DEBUG_TRACE] Log generated variable declaration
-        log.info(">>> [DEBUG_TRACE] Generating variable: type={}, name={}, valNode={}", paramType, paramName,
-                paramValueNode);
-        log.info(">>> [DEBUG_TRACE] Generated code: {} {}{} = {};", paramType, paramName, testCaseIndex,
-                declarationValue);
 
         builder.append("            ").append(paramType).append(" ").append(paramName).append(testCaseIndex)
                 .append(" = ").append(declarationValue).append(";\n");

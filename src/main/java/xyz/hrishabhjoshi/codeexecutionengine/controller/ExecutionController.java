@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
+import xyz.hrishabhjoshi.codeexecutionengine.logging.RequestContext;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionQueueService;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.SubmissionStatusService;
 
@@ -37,8 +38,11 @@ public class ExecutionController {
         public ResponseEntity<ExecutionResponse> submitExecution(
                         @RequestBody ExecutionRequest request,
                         HttpServletRequest httpRequest) {
-                log.info("=== [CONTROLLER] POST /submit received ===");
-                log.info("[CONTROLLER] submissionId={}, executionId={}, userId={}, questionId={}, language={}",
+                if (request.getRequestId() == null || request.getRequestId().isBlank()) {
+                        request.setRequestId(RequestContext.getRequestId());
+                }
+
+                log.info("[CONTROLLER] submit received submissionId={}, executionId={}, userId={}, questionId={}, language={}",
                                 request.getSubmissionId(), request.getExecutionId(), request.getUserId(), request.getQuestionId(),
                                 request.getLanguage());
                 log.info("[CONTROLLER] code length={}, testCases count={}",
@@ -51,31 +55,13 @@ public class ExecutionController {
                         if (meta.getParameters() != null) {
                                 for (int i = 0; i < meta.getParameters().size(); i++) {
                                         var p = meta.getParameters().get(i);
-                                        log.info("[CONTROLLER] metadata.param[{}]: name={}, type={}", i, p.getName(), p.getType());
+                                        log.debug("[CONTROLLER] metadata.param[{}]: name={}, type={}", i, p.getName(), p.getType());
                                 }
                         }
-                        log.info("[CONTROLLER] metadata.customDataStructures={}", meta.getCustomDataStructures());
+                        log.debug("[CONTROLLER] metadata.customDataStructure count={}",
+                                        meta.getCustomDataStructures() != null ? meta.getCustomDataStructures().size() : 0);
                 } else {
                         log.warn("[CONTROLLER] metadata is NULL!");
-                }
-
-                // [DEBUG_TRACE] Log raw request details
-                try {
-                        log.info(">>> [DEBUG_TRACE] Raw Request: submissionId={}, executionId={}, language={}, questionId={}",
-                                        request.getSubmissionId(), request.getExecutionId(), request.getLanguage(), request.getQuestionId());
-                        if (request.getTestCases() != null) {
-                                log.info(">>> [DEBUG_TRACE] Request TestCases count: {}",
-                                                request.getTestCases().size());
-                                for (int i = 0; i < request.getTestCases().size(); i++) {
-                                        log.info(">>> [DEBUG_TRACE] TestCase[{}]: {}", i, request.getTestCases().get(i));
-                                }
-                        } else {
-                                log.info(">>> [DEBUG_TRACE] Request TestCases is NULL");
-                        }
-                        log.info(">>> [DEBUG_TRACE] User code (first 200 chars): {}",
-                                        request.getCode() != null ? request.getCode().substring(0, Math.min(200, request.getCode().length())) : "null");
-                } catch (Exception e) {
-                        log.error(">>> [DEBUG_TRACE] Error logging request details", e);
                 }
 
                 // Capture client info
@@ -83,10 +69,7 @@ public class ExecutionController {
                 request.setUserAgent(httpRequest.getHeader("User-Agent"));
 
                 // Enqueue for async processing
-                log.info("[CONTROLLER] Calling queueService.enqueue()...");
-
-                // [DEBUG_TRACE] Log enqueue intent
-                log.info(">>> [DEBUG_TRACE] Enqueuing submission: {}", request.getSubmissionId());
+                log.debug("[CONTROLLER] enqueueing submission={}", request.getSubmissionId());
 
                 String submissionId = queueService.enqueue(request);
                 log.info("[CONTROLLER] Enqueued successfully with submissionId={} executionId={}", submissionId, request.getExecutionId());

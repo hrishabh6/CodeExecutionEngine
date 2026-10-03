@@ -46,7 +46,7 @@ public class JavaMainClassGenerator {
         for (int i = 0; i < submissionDto.getTestCases().size(); i++) {
             Map<String, Object> testCase = submissionDto.getTestCases().get(i);
             String inputJson = objectMapper.writeValueAsString(testCase.get("input"));
-            log.info("[MainClassGen] Processing testCase[{}]: inputJson={}", i, inputJson);
+            log.debug("[MainClassGen] Processing testCase[{}]", i);
             appendTestCaseLogic(mainContent, submissionDto, metadata, inputJson, i);
         }
 

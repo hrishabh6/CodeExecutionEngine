@@ -92,7 +92,7 @@ public class JavaDesignClassGenerator {
                 for (int i = 0; i < submissionDto.getTestCases().size(); i++) {
                         Map<String, Object> testCase = submissionDto.getTestCases().get(i);
                         String inputJson = objectMapper.writeValueAsString(testCase.get("input"));
-                        log.info("[DesignClassGen] Processing testCase[{}]: inputJson={}", i, inputJson);
+                        log.debug("[DesignClassGen] Processing testCase[{}]", i);
                         appendDesignTestCaseLogic(content, className, inputJson, i);
                 }
 

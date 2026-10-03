@@ -120,12 +120,12 @@ public class JavaExecutionService implements ExecutionService {
                     results.add(testCaseOutput);
                     parsedCount++;
 
-                    logConsumer.accept("PARSE_SUCCESS: Test case " + index + " - output: " + actualOutput
+                    logConsumer.accept("PARSE_SUCCESS: Test case " + index
                             + ", duration: " + duration + "ms, memory: "
                             + (memoryBytes != null ? memoryBytes + " bytes" : "unavailable"));
 
                 } catch (Exception e) {
-                    logConsumer.accept("PARSE_ERROR: Failed to parse line: " + line + " - "
+                    logConsumer.accept("PARSE_ERROR: Failed to parse execution output line - "
                             + e.getClass().getSimpleName() + ": " + e.getMessage());
                 }
             }

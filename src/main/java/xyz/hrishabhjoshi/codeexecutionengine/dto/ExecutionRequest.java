@@ -44,6 +44,11 @@ public class ExecutionRequest {
     private String code;
 
     /**
+     * Correlation ID propagated from the edge request.
+     */
+    private String requestId;
+
+    /**
      * Question metadata for code generation
      */
     private QuestionMetadata metadata;

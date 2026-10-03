@@ -15,9 +15,6 @@ public class ValueDeclarationGenerator {
 
     public static String generateValueDeclaration(String paramType, JsonNode node, Map<String, String> customClasses)
             throws JsonProcessingException {
-        // [DEBUG_TRACE] Log value generation intent
-        log.info(">>> [DEBUG_TRACE] ValueDeclarationGenerator: type={}, node={}", paramType, node);
-
         // Handle array types for custom data structures
         if (paramType.endsWith("[]")) {
             String baseType = paramType.substring(0, paramType.length() - 2);

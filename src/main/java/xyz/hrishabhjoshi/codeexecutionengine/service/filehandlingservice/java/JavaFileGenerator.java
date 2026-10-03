@@ -28,10 +28,11 @@ public class JavaFileGenerator implements FileGenerator {
         }
 
         log.info(
-                "[JavaFileGen] metadata: functionName={}, returnType={}, packageName={}, params={}, customDS={}, mutationTarget={}",
+                "[JavaFileGen] metadata: functionName={}, returnType={}, packageName={}, params={}, customDSCount={}, mutationTarget={}",
                 metadata.getFunctionName(), metadata.getReturnType(), metadata.getFullyQualifiedPackageName(),
                 metadata.getParameters() != null ? metadata.getParameters().size() : 0,
-                metadata.getCustomDataStructureNames(), metadata.getMutationTarget());
+                metadata.getCustomDataStructureNames() != null ? metadata.getCustomDataStructureNames().size() : 0,
+                metadata.getMutationTarget());
 
         Path packageDir = createPackageDirectories(rootPath, metadata.getFullyQualifiedPackageName());
         Files.createDirectories(packageDir);
@@ -43,10 +44,6 @@ public class JavaFileGenerator implements FileGenerator {
         Files.writeString(mainFilePath, mainClassContent);
         log.info("[JavaFileGen] Main.java written to {} (length={})", mainFilePath.toAbsolutePath(),
                 mainClassContent.length());
-
-        // [DEBUG_TRACE] Log Main.java content
-        log.info(">>> [DEBUG_TRACE] Main.java CONTENT START:\n{}\n>>> [DEBUG_TRACE] Main.java CONTENT END",
-                mainClassContent);
 
         log.info("[JavaFileGen] Generating Solution/Class file...");
         String solutionClassContent = JavaSolutionClassGenerator.generateSolutionClassContent(submissionDto);
@@ -66,9 +63,6 @@ public class JavaFileGenerator implements FileGenerator {
         log.info("[JavaFileGen] {} written to {} (length={})", solutionFileName, solutionFilePath.toAbsolutePath(),
                 solutionClassContent.length());
 
-        // [DEBUG_TRACE] Log Solution.java content
-        log.info(">>> [DEBUG_TRACE] {} CONTENT START:\n{}\n>>> [DEBUG_TRACE] {} CONTENT END",
-                solutionFileName, solutionClassContent, solutionFileName);
         log.info("[JavaFileGen] === END generating Java files ===");
     }
 

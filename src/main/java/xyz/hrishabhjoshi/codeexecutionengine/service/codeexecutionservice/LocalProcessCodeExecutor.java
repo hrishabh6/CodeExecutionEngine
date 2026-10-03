@@ -71,7 +71,8 @@ public class LocalProcessCodeExecutor implements CodeExecutor {
                     compileResult.isSuccess(), overallCompilationOutput != null ? overallCompilationOutput.length() : 0);
 
             if (!compileResult.isSuccess()) {
-                log.error("[CODE_EXECUTOR] COMPILATION FAILED! Output:\n{}", overallCompilationOutput);
+                log.error("[CODE_EXECUTOR] COMPILATION FAILED! outputLength={}",
+                        overallCompilationOutput != null ? overallCompilationOutput.length() : 0);
                 return CodeExecutionResultDTO.builder()
                     .submissionId(submissionId)
                     .executionId(executionId)
@@ -100,9 +101,9 @@ public class LocalProcessCodeExecutor implements CodeExecutor {
 
             log.info("[CODE_EXECUTOR] === STEP 3: MAPPING TEST CASE RESULTS ===");
             for (ExecutionResult.TestCaseOutput tcOutput : runResult.getTestCaseOutputs()) {
-                log.info("[CODE_EXECUTOR] Mapping testCase[{}]: output='{}', timeMs={}, memBytes={}, error={}",
-                        tcOutput.getTestCaseIndex(), tcOutput.getActualOutput(),
-                        tcOutput.getExecutionTimeMs(), tcOutput.getMemoryBytes(), tcOutput.getErrorMessage());
+                log.info("[CODE_EXECUTOR] Mapping testCase[{}]: timeMs={}, memBytes={}, hasError={}",
+                        tcOutput.getTestCaseIndex(),
+                        tcOutput.getExecutionTimeMs(), tcOutput.getMemoryBytes(), tcOutput.getErrorMessage() != null);
                 finalTestCaseOutputs.add(CodeExecutionResultDTO.TestCaseOutput.builder()
                         .testCaseIndex(tcOutput.getTestCaseIndex())
                         .actualOutput(tcOutput.getActualOutput())
