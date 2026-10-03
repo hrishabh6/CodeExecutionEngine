@@ -39,6 +39,16 @@ public class ExecutionRequest {
     private String language;
 
     /**
+     * SUBMISSION (default), PLAYGROUND, or COMPLEXITY_PROFILE. JSON property {@code executionMode}.
+     */
+    private String executionMode;
+
+    /**
+     * Raw stdin for PLAYGROUND; must be absent or empty for SUBMISSION.
+     */
+    private String stdin;
+
+    /**
      * User's solution code
      */
     private String code;

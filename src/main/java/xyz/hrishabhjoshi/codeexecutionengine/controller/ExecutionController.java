@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
 import xyz.hrishabhjoshi.codeexecutionengine.logging.RequestContext;
+import xyz.hrishabhjoshi.codeexecutionengine.dto.ExecutionMode;
+import xyz.hrishabhjoshi.codeexecutionengine.execution.ExecutionPolicyResolver;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionQueueService;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.SubmissionStatusService;
 
@@ -25,6 +27,7 @@ public class ExecutionController {
 
         private final ExecutionQueueService queueService;
         private final SubmissionStatusService statusService;
+        private final ExecutionPolicyResolver executionPolicyResolver;
 
         /**
          * Submit code for execution (async).
@@ -67,6 +70,10 @@ public class ExecutionController {
                 // Capture client info
                 request.setIpAddress(getClientIp(httpRequest));
                 request.setUserAgent(httpRequest.getHeader("User-Agent"));
+
+                ExecutionMode mode = executionPolicyResolver.resolveMode(request.getExecutionMode());
+                request.setExecutionMode(mode.name());
+                executionPolicyResolver.validateIngress(mode, request);
 
                 // Enqueue for async processing
                 log.debug("[CONTROLLER] enqueueing submission={}", request.getSubmissionId());

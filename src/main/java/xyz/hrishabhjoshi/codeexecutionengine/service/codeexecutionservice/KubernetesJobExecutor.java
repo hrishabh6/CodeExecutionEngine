@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.config.KubernetesExecutionProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.config.PlaygroundSandboxProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.service.execution.SandboxedKubernetesJobBuilder;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.Status;
@@ -34,6 +36,7 @@ public class KubernetesJobExecutor implements CodeExecutor {
     private final KubernetesExecutionProperties kubernetesProperties;
     private final ExecutionPayloadCodec payloadCodec;
     private final ExecutionJobResultStore resultStore;
+    private final PlaygroundSandboxProperties playgroundSandboxProperties;
 
     @Override
     public CodeExecutionResultDTO execute(
@@ -134,6 +137,21 @@ public class KubernetesJobExecutor implements CodeExecutor {
     }
 
     private Job buildJob(String jobName, String namespace, String submissionId, String executionId, String payload) {
+        if (playgroundSandboxProperties.isHardenAllExecutionJobs()) {
+            Map<String, String> env = new LinkedHashMap<>();
+            env.put("EXECUTION_BACKEND", "worker-pod");
+            return SandboxedKubernetesJobBuilder.buildJob(
+                    jobName,
+                    namespace,
+                    submissionId,
+                    executionId,
+                    payload,
+                    env,
+                    kubernetesProperties,
+                    playgroundSandboxProperties,
+                    false);
+        }
+
         Map<String, String> labels = new LinkedHashMap<>();
         labels.put("app", "code-execution-engine");
         labels.put("component", "execution-job");

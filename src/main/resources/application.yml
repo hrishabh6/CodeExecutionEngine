@@ -44,6 +44,22 @@ execution:
     status-ttl-seconds: 3600
     job-result-prefix: "execution:job-result:"
     job-result-ttl-seconds: ${KUBERNETES_JOB_RESULT_TTL_SECONDS:600}
+    playground-job-result-prefix: ${EXECUTION_PLAYGROUND_JOB_RESULT_PREFIX:execution:playground-job-result:}
+  playground:
+    enabled: ${EXECUTION_PLAYGROUND_ENABLED:false}
+    execution-timeout-seconds: ${EXECUTION_PLAYGROUND_TIMEOUT_SECONDS:5}
+    max-combined-output-bytes: ${EXECUTION_PLAYGROUND_MAX_OUTPUT_BYTES:65536}
+    max-compiler-output-bytes: ${EXECUTION_PLAYGROUND_MAX_COMPILER_OUTPUT_BYTES:32768}
+    max-source-bytes: ${EXECUTION_PLAYGROUND_MAX_SOURCE_BYTES:32768}
+    max-stdin-bytes: ${EXECUTION_PLAYGROUND_MAX_STDIN_BYTES:8192}
+    sandbox:
+      backend: ${EXECUTION_PLAYGROUND_SANDBOX_BACKEND:local-process}
+      production-verified: ${EXECUTION_PLAYGROUND_SANDBOX_PRODUCTION_VERIFIED:false}
+      job-service-account-name: ${EXECUTION_PLAYGROUND_JOB_SA:cxe-playground-executor}
+      run-as-user: ${EXECUTION_PLAYGROUND_RUN_AS_USER:65532}
+      run-as-group: ${EXECUTION_PLAYGROUND_RUN_AS_GROUP:65532}
+      fs-group: ${EXECUTION_PLAYGROUND_FS_GROUP:65532}
+      harden-all-execution-jobs: ${EXECUTION_HARDEN_ALL_JOBS:false}
   runtime:
     compilation-timeout-seconds: ${EXECUTION_COMPILATION_TIMEOUT_SECONDS:30}
     memory-soft-limit-mb: ${EXECUTION_MEMORY_SOFT_LIMIT_MB:256}

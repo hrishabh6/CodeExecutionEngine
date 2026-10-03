@@ -85,6 +85,17 @@ public class SubmissionStatusDto {
      */
     private String workerId;
 
+    /** PLAYGROUND: SUBMISSION | PLAYGROUND */
+    private String executionMode;
+
+    /** PLAYGROUND typed terminal status (SUCCESS, COMPILE_ERROR, ...) */
+    private String rawExecutionStatus;
+
+    private String stdout;
+    private String stderr;
+    private Integer exitCode;
+    private Boolean outputTruncated;
+
     @Data
     @Builder
     @NoArgsConstructor

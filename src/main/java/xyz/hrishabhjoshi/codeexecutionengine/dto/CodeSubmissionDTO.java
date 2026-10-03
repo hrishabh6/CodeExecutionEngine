@@ -13,6 +13,8 @@ public class CodeSubmissionDTO {
 
     private String submissionId;
     private String executionId;
+    private String executionMode;
+    private String stdin;
     private String language;
     private String userSolutionCode;
     private QuestionMetadata questionMetadata;

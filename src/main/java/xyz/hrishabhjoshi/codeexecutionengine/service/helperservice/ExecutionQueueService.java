@@ -9,6 +9,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ExecutionRequest;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.SubmissionStatusDto;
+import xyz.hrishabhjoshi.codeexecutionengine.execution.ExecutionRequestRejectedException;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +38,9 @@ public class ExecutionQueueService {
 
     @Value("${execution.queue.status-ttl-seconds:3600}")
     private long statusTtl;
+
+    @Value("${execution.worker.queue-capacity:100}")
+    private long queueCapacity;
 
     /**
      * Add submission to queue for execution.
@@ -67,6 +71,13 @@ public class ExecutionQueueService {
             log.info("[QUEUE] Generated new executionId={}", executionId);
         } else {
             log.info("[QUEUE] Using provided executionId={}", executionId);
+        }
+
+        Long currentDepth = redisTemplate.opsForList().size(queueName);
+        if (currentDepth != null && currentDepth >= queueCapacity) {
+            throw new ExecutionRequestRejectedException(
+                    "EXECUTION_QUEUE_FULL",
+                    "Execution queue is full");
         }
 
         // Set initial status in Redis (fast polling)

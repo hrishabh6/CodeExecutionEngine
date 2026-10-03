@@ -7,11 +7,11 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
-import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
-import xyz.hrishabhjoshi.codeexecutionengine.dto.Status;
+import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
+import xyz.hrishabhjoshi.codeexecutionengine.execution.PlaygroundProgramExecutor;
 import xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice.ExecutionPayloadCodec;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionJobResultStore;
+import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.PlaygroundJobResultStore;
 
 @Slf4j
 @Component
@@ -22,6 +22,8 @@ public class KubernetesJobRunner implements CommandLineRunner {
     private final ExecutionPayloadCodec payloadCodec;
     private final CodeExecutionManager codeExecutionManager;
     private final ExecutionJobResultStore resultStore;
+    private final PlaygroundJobResultStore playgroundJobResultStore;
+    private final PlaygroundProgramExecutor playgroundProgramExecutor;
     private final ConfigurableApplicationContext applicationContext;
 
     @Value("${execution.mode:worker}")
@@ -47,17 +49,33 @@ public class KubernetesJobRunner implements CommandLineRunner {
             CodeSubmissionDTO submission = payloadCodec.decode(payloadBase64);
             executionId = submission.getExecutionId();
 
-            log.info("[JOB_RUNNER] Starting one-shot execution for submissionId={} executionId={}",
-                    submission.getSubmissionId(), submission.getExecutionId());
+            log.info("[JOB_RUNNER] Starting one-shot execution for submissionId={} executionId={} mode={}",
+                    submission.getSubmissionId(), submission.getExecutionId(), submission.getExecutionMode());
 
-            CodeExecutionResultDTO result = codeExecutionManager.runCodeWithTestcases(
-                    submission,
-                    logLine -> log.info("[JOB_RUNNER:{}] {}", submission.getExecutionId(), logLine));
+            if (ExecutionMode.PLAYGROUND.name().equalsIgnoreCase(submission.getExecutionMode())) {
+                ExecutionRequest playgroundRequest = ExecutionRequest.builder()
+                        .submissionId(submission.getSubmissionId())
+                        .executionId(submission.getExecutionId())
+                        .language(submission.getLanguage())
+                        .code(submission.getUserSolutionCode())
+                        .stdin(submission.getStdin())
+                        .executionMode(ExecutionMode.PLAYGROUND.name())
+                        .build();
+                RawExecutionResult raw = playgroundProgramExecutor.execute(playgroundRequest);
+                playgroundJobResultStore.save(submission.getExecutionId(), raw);
+                exitCode = raw.getStatus() == RawExecutionStatus.INTERNAL_ERROR ? 1 : 0;
+                log.info("[JOB_RUNNER] Stored playground result executionId={} status={}",
+                        submission.getExecutionId(), raw.getStatus());
+            } else {
+                CodeExecutionResultDTO result = codeExecutionManager.runCodeWithTestcases(
+                        submission,
+                        logLine -> log.info("[JOB_RUNNER:{}] {}", submission.getExecutionId(), logLine));
 
-            resultStore.save(submission.getExecutionId(), result);
-            exitCode = result.getOverallStatus() == Status.INTERNAL_ERROR ? 1 : 0;
-            log.info("[JOB_RUNNER] Stored result for executionId={} with status={}",
-                    submission.getExecutionId(), result.getOverallStatus());
+                resultStore.save(submission.getExecutionId(), result);
+                exitCode = result.getOverallStatus() == Status.INTERNAL_ERROR ? 1 : 0;
+                log.info("[JOB_RUNNER] Stored result for executionId={} with status={}",
+                        submission.getExecutionId(), result.getOverallStatus());
+            }
         } catch (Exception e) {
             exitCode = 1;
             log.error("[JOB_RUNNER] One-shot execution failed for executionId={}: {}", executionId, e.getMessage(), e);

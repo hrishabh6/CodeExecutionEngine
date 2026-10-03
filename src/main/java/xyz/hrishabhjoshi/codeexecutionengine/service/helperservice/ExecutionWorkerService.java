@@ -8,6 +8,12 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.CodeExecutionManager;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
+import xyz.hrishabhjoshi.codeexecutionengine.execution.ExecutionPolicyResolver;
+import xyz.hrishabhjoshi.codeexecutionengine.config.PlaygroundSandboxProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.execution.PlaygroundProgramExecutor;
+import xyz.hrishabhjoshi.codeexecutionengine.service.execution.PlaygroundKubernetesJobService;
+import xyz.hrishabhjoshi.codeexecutionengine.dto.RawExecutionResult;
+import xyz.hrishabhjoshi.codeexecutionengine.dto.RawExecutionStatus;
 import xyz.hrishabhjoshi.codeexecutionengine.logging.RequestContext;
 import xyz.hrishabhjoshi.codeexecutionengine.service.utils.MemoryParser;
 
@@ -29,16 +35,28 @@ public class ExecutionWorkerService {
     private final ExecutionQueueService queueService;
     private final CodeExecutionManager codeExecutionManager;
     private final ObjectMapper objectMapper;
+    private final ExecutionPolicyResolver executionPolicyResolver;
+    private final PlaygroundProgramExecutor playgroundProgramExecutor;
+    private final PlaygroundKubernetesJobService playgroundKubernetesJobService;
+    private final PlaygroundSandboxProperties playgroundSandboxProperties;
 
     /** Volatile flag to signal all workers to stop gracefully on shutdown. */
     private volatile boolean running = true;
 
     public ExecutionWorkerService(ExecutionQueueService queueService,
                                   CodeExecutionManager codeExecutionManager,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  ExecutionPolicyResolver executionPolicyResolver,
+                                  PlaygroundProgramExecutor playgroundProgramExecutor,
+                                  PlaygroundKubernetesJobService playgroundKubernetesJobService,
+                                  PlaygroundSandboxProperties playgroundSandboxProperties) {
         this.queueService = queueService;
         this.codeExecutionManager = codeExecutionManager;
         this.objectMapper = objectMapper;
+        this.executionPolicyResolver = executionPolicyResolver;
+        this.playgroundProgramExecutor = playgroundProgramExecutor;
+        this.playgroundKubernetesJobService = playgroundKubernetesJobService;
+        this.playgroundSandboxProperties = playgroundSandboxProperties;
     }
 
     @Value("${execution.worker.poll-timeout-seconds:5}")
@@ -157,6 +175,20 @@ public class ExecutionWorkerService {
         long startTime = System.currentTimeMillis();
 
         try {
+            ExecutionMode mode = executionPolicyResolver.resolveMode(request.getExecutionMode());
+            request.setExecutionMode(mode.name());
+            if (!executionPolicyResolver.isWorkerRunnable(mode)) {
+                log.warn("[WORKER] {} unsupported executionMode={} for {}", workerId, mode, submissionId);
+                updateStatus(submissionId, executionId, "FAILED", workerId,
+                        "EXECUTION_MODE_DISABLED: " + mode.name(), null);
+                return;
+            }
+
+            if (mode == ExecutionMode.PLAYGROUND) {
+                processPlaygroundSubmission(request, workerId, submissionId, executionId, startTime);
+                return;
+            }
+
             // FAIL EARLY: Metadata is required - CXE does not fetch from database
             if (request.getMetadata() == null) {
                 log.error("[WORKER] {} missing metadata for {}", workerId, submissionId);
@@ -232,6 +264,47 @@ public class ExecutionWorkerService {
         }
     }
 
+    private RawExecutionResult runPlaygroundInSandbox(ExecutionRequest request) {
+        if (playgroundSandboxProperties.isKubernetesJobBackend()) {
+            return playgroundKubernetesJobService.runIsolated(request);
+        }
+        return playgroundProgramExecutor.execute(request);
+    }
+
+    private void processPlaygroundSubmission(
+            ExecutionRequest request,
+            String workerId,
+            String submissionId,
+            String executionId,
+            long startTime) {
+        updateStatus(submissionId, executionId, "COMPILING", workerId, null, null);
+        RawExecutionResult raw = runPlaygroundInSandbox(request);
+        boolean internal = raw.getStatus() == RawExecutionStatus.INTERNAL_ERROR;
+        String redisStatus = internal ? "FAILED" : "COMPLETED";
+        SubmissionStatusDto statusDto = SubmissionStatusDto.builder()
+                .submissionId(submissionId)
+                .executionId(executionId)
+                .status(redisStatus)
+                .executionMode(ExecutionMode.PLAYGROUND.name())
+                .rawExecutionStatus(raw.getStatus().name())
+                .stdout(raw.getStdout())
+                .stderr(raw.getStderr())
+                .compilationOutput(raw.getCompilerOutput())
+                .exitCode(raw.getExitCode())
+                .runtimeMs(raw.getRuntimeMs())
+                .memoryKb(raw.getMemoryKb())
+                .outputTruncated(raw.isOutputTruncated())
+                .errorMessage(internal ? "INTERNAL_ERROR" : null)
+                .verdict(null)
+                .completedAt(System.currentTimeMillis())
+                .workerId(workerId)
+                .build();
+        queueService.setRedisStatus(submissionId, statusDto);
+        log.info("=== [WORKER] {} {} {} playground rawStatus={} total={}ms ===",
+                workerId, redisStatus, submissionId, raw.getStatus(),
+                System.currentTimeMillis() - startTime);
+    }
+
     /**
      * Build CodeSubmissionDTO from ExecutionRequest.
      * Metadata MUST be provided by the caller (SubmissionService).
@@ -294,6 +367,8 @@ public class ExecutionWorkerService {
         CodeSubmissionDTO dto = CodeSubmissionDTO.builder()
                 .submissionId(request.getSubmissionId())
                 .executionId(request.getExecutionId())
+                .executionMode(request.getExecutionMode())
+                .stdin(request.getStdin())
                 .language(request.getLanguage())
                 .userSolutionCode(request.getCode())
                 .questionMetadata(questionMeta)
