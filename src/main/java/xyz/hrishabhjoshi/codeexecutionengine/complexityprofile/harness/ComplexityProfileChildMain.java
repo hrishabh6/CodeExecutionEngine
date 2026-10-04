@@ -36,6 +36,7 @@ public final class ComplexityProfileChildMain {
                 objectMapper);
         ComplexityProfileJavaHarness.HarnessRunResult result = engine.execute(job);
         objectMapper.writeValue(resultFile.toFile(), result);
+        System.exit(0);
     }
 
     private static ExecutionRuntimeProperties.LanguageRuntime defaultJavaRuntime() {

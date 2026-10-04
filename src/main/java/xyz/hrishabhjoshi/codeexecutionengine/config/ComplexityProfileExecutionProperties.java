@@ -1,5 +1,6 @@
 package xyz.hrishabhjoshi.codeexecutionengine.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -86,6 +87,50 @@ public class ComplexityProfileExecutionProperties {
         private boolean productionVerified = false;
         /** local-process profiling is not a production sandbox; requires explicit dev enablement. */
         private boolean trustedDevelopmentOnly = true;
+        private String jobServiceAccountName = "cxe-complexity-profile-executor";
+        private long runAsUser = 65532;
+        private long runAsGroup = 65532;
+        private long fsGroup = 65532;
+        private int maxConcurrentJobs = 4;
+        private long jobActiveDeadlineSeconds = 180;
+        private long jobCompletionTimeoutSeconds = 200;
+        private Integer ttlSecondsAfterFinished = 300;
+        private long terminationGracePeriodSeconds = 5;
+        private JobResources jobResources = new JobResources();
+        /** ACL-scoped prefix for sandbox Job Redis keys (payload + measurement). */
+        private String sandboxRedisKeyPrefix = "execution:complexity-profile:sandbox:";
+        /** Worker-only oracle storage; not granted to sandbox Redis ACL user. */
+        private String trustedOracleKeyPrefix = "execution:complexity-profile:trusted:oracle:";
+        private String slotKeyPrefix = "execution:complexity-profile:slot:";
+        private long slotTtlGraceSeconds = 120;
+        /** Dedicated ACL user for profile Job pods — must not use CXE worker Redis credentials. */
+        private String sandboxRedisUsername = "";
+        private String sandboxRedisPassword = "";
+        /**
+         * Kubernetes Secret for profile Job pod sandbox Redis credentials (username/password keys).
+         * When set, Jobs use secretKeyRef instead of literal env values.
+         */
+        private String sandboxRedisCredentialsSecretName = "cxe-complexity-profile-sandbox-redis";
+        private String sandboxRedisUsernameSecretKey = "username";
+        private String sandboxRedisPasswordSecretKey = "password";
+        /** When true with production-verified kubernetes-job, sandbox Redis credentials are mandatory. */
+        private boolean requireSandboxRedisCredentials = true;
+
+        @JsonIgnore
+        public boolean isKubernetesJobBackend() {
+            return "kubernetes-job".equalsIgnoreCase(backend == null ? "" : backend.trim());
+        }
+    }
+
+    @Getter
+    @Setter
+    public static class JobResources {
+        private String cpuRequest = "500m";
+        private String memoryRequest = "512Mi";
+        private String cpuLimit = "1";
+        private String memoryLimit = "768Mi";
+        private String ephemeralStorageRequest = "256Mi";
+        private String ephemeralStorageLimit = "512Mi";
     }
 
     public static final String INTERNAL_SERVICE_TOKEN_HEADER = "X-Internal-Service-Token";

@@ -24,10 +24,10 @@ public class ComplexityProfileRequestValidator {
                     "EXECUTION_MODE_DISABLED",
                     "COMPLEXITY_PROFILE execution is not enabled");
         }
-        if ("kubernetes-job".equalsIgnoreCase(properties.getSandbox().getBackend())) {
+        if (properties.getSandbox().isKubernetesJobBackend() && !properties.getSandbox().isProductionVerified()) {
             throw new ExecutionRequestRejectedException(
-                    "SANDBOX_NOT_READY",
-                    "Production complexity profile sandbox is not available in Phase 4");
+                    "SANDBOX_NOT_VERIFIED",
+                    "COMPLEXITY_PROFILE kubernetes-job sandbox requires production-verified gate");
         }
         if (!"JAVA".equalsIgnoreCase(request.language().trim())) {
             throw new ExecutionRequestRejectedException("INVALID_LANGUAGE", "Only JAVA is supported for profiling");

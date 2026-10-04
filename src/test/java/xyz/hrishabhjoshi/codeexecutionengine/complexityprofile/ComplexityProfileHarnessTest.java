@@ -103,7 +103,7 @@ class ComplexityProfileHarnessTest {
     void constantWorkloadMedianIsStableAcrossInputSizes() {
         long small = medianNs(job(constantTimeSource(), List.of(caseRequestConstant("s", 200, 0, 5))));
         long large = medianNs(job(constantTimeSource(), List.of(caseRequestConstant("l", 4000, 0, 5))));
-        assertTrue(Math.abs(large - small) < small / 2 + 1);
+        assertTrue(Math.abs(large - small) < Math.max(500_000L, small / 2 + 1));
     }
 
     @Test

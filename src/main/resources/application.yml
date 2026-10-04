@@ -77,6 +77,29 @@ execution:
       backend: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_BACKEND:local-process}
       production-verified: ${EXECUTION_COMPLEXITY_PROFILE_PRODUCTION_VERIFIED:false}
       trusted-development-only: true
+      job-service-account-name: ${EXECUTION_COMPLEXITY_PROFILE_JOB_SA:cxe-complexity-profile-executor}
+      max-concurrent-jobs: ${EXECUTION_COMPLEXITY_PROFILE_MAX_CONCURRENT_JOBS:4}
+      job-active-deadline-seconds: ${EXECUTION_COMPLEXITY_PROFILE_JOB_ACTIVE_DEADLINE_SECONDS:180}
+      job-completion-timeout-seconds: ${EXECUTION_COMPLEXITY_PROFILE_JOB_COMPLETION_TIMEOUT_SECONDS:200}
+      ttl-seconds-after-finished: ${EXECUTION_COMPLEXITY_PROFILE_JOB_TTL_SECONDS:300}
+      termination-grace-period-seconds: ${EXECUTION_COMPLEXITY_PROFILE_JOB_TERMINATION_GRACE_SECONDS:5}
+      sandbox-redis-key-prefix: execution:complexity-profile:sandbox:
+      trusted-oracle-key-prefix: execution:complexity-profile:trusted:oracle:
+      slot-key-prefix: execution:complexity-profile:slot:
+      slot-ttl-grace-seconds: 120
+      sandbox-redis-username: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_REDIS_USERNAME:}
+      sandbox-redis-password: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_REDIS_PASSWORD:}
+      sandbox-redis-credentials-secret-name: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_REDIS_SECRET_NAME:cxe-complexity-profile-sandbox-redis}
+      sandbox-redis-username-secret-key: username
+      sandbox-redis-password-secret-key: password
+      require-sandbox-redis-credentials: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_REDIS_REQUIRED:true}
+      job-resources:
+        cpu-request: ${EXECUTION_COMPLEXITY_PROFILE_CPU_REQUEST:500m}
+        memory-request: ${EXECUTION_COMPLEXITY_PROFILE_MEMORY_REQUEST:512Mi}
+        cpu-limit: ${EXECUTION_COMPLEXITY_PROFILE_CPU_LIMIT:1}
+        memory-limit: ${EXECUTION_COMPLEXITY_PROFILE_MEMORY_LIMIT:768Mi}
+        ephemeral-storage-request: ${EXECUTION_COMPLEXITY_PROFILE_EPHEMERAL_REQUEST:256Mi}
+        ephemeral-storage-limit: ${EXECUTION_COMPLEXITY_PROFILE_EPHEMERAL_LIMIT:512Mi}
   playground:
     enabled: ${EXECUTION_PLAYGROUND_ENABLED:false}
     execution-timeout-seconds: ${EXECUTION_PLAYGROUND_TIMEOUT_SECONDS:5}

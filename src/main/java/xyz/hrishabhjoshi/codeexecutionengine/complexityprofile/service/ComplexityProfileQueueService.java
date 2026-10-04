@@ -101,6 +101,26 @@ public class ComplexityProfileQueueService {
         return deserialize(value, ComplexityProfilePollResponse.class);
     }
 
+    public void stageJobPayloadForRunner(ComplexityProfileJobPayload payload) {
+        String executionId = payload.getExecutionId();
+        String jobKey = properties.getQueue().getJobPayloadPrefix() + executionId;
+        redisTemplate.opsForValue().set(
+                jobKey,
+                payload,
+                properties.getQueue().getQueuedJobMaxAgeSeconds(),
+                TimeUnit.SECONDS);
+    }
+
+    public Optional<ComplexityProfileJobPayload> loadStagedJobPayload(String executionId) {
+        String jobKey = properties.getQueue().getJobPayloadPrefix() + executionId;
+        Object stored = redisTemplate.opsForValue().get(jobKey);
+        return deserialize(stored, ComplexityProfileJobPayload.class);
+    }
+
+    public void deleteStagedJobPayload(String executionId) {
+        redisTemplate.delete(properties.getQueue().getJobPayloadPrefix() + executionId);
+    }
+
     public void storeResult(String executionId, ComplexityProfilePollResponse terminal) {
         String key = properties.getQueue().getResultPrefix() + executionId;
         redisTemplate.opsForValue().set(

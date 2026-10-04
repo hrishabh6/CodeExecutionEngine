@@ -1,6 +1,11 @@
 package xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.harness;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileSandboxDtos.ComplexityProfileSandboxJobPayload;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileSandboxDtos.ComplexityProfileSandboxMeasurementResult;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileSandboxDtos.SandboxCaseMeasurement;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileSandboxDtos.SandboxProfileCaseRequest;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileExecutionDtos.ProfileCaseRequest;
@@ -45,13 +50,55 @@ public class ComplexityProfileMeasurementEngine {
         this.objectMapper = objectMapper;
     }
 
+    public ComplexityProfileSandboxMeasurementResult executeSandbox(ComplexityProfileSandboxJobPayload job) {
+        compileInvocationCount = 0;
+        long profileStart = System.nanoTime();
+        Path workspace = null;
+        try {
+            workspace = Files.createTempDirectory("cxe-profile-sandbox-");
+            CompileOutcome compile = compileOnce(job.sourceCode(), job.questionMetadata(), workspace);
+            if (!compile.success()) {
+                return new ComplexityProfileSandboxMeasurementResult(
+                        job.executionId(), "FAILED", compile.message(), List.of());
+            }
+            try (URLClassLoader classLoader = URLClassLoader.newInstance(
+                    new URL[] {workspace.toUri().toURL()}, getClass().getClassLoader())) {
+                Class<?> solutionClass = classLoader.loadClass(compile.fqcn());
+                if (ComplexityProfileMutableStaticScanner.hasUnsupportedMutableStaticState(solutionClass)) {
+                    return sandboxStaticRejected(job);
+                }
+                Method target = resolveTargetMethod(solutionClass, job.questionMetadata());
+                ComplexityProfileArgumentMaterializer materializer = new ComplexityProfileArgumentMaterializer(objectMapper);
+                ComplexityProfileOutputValidator outputValidator = new ComplexityProfileOutputValidator(objectMapper);
+                List<SandboxCaseMeasurement> caseResults = new ArrayList<>();
+                for (SandboxProfileCaseRequest profileCase : job.cases()) {
+                    if (elapsedMs(profileStart) > profileProperties.getLimits().getMaxTotalProfileMs()) {
+                        caseResults.add(failedSandboxCase(profileCase, "PROFILE_TIME_BUDGET", "PROFILE_TIME_BUDGET", null));
+                        continue;
+                    }
+                    caseResults.add(runSandboxCase(
+                            target, solutionClass, materializer, outputValidator, job.questionMetadata(), profileCase, profileStart));
+                }
+                return new ComplexityProfileSandboxMeasurementResult(job.executionId(), "SUCCESS", null, caseResults);
+            }
+        } catch (Exception e) {
+            log.warn("[PROFILE-SANDBOX] job {} failed: {}", job.executionId(), e.getMessage());
+            return new ComplexityProfileSandboxMeasurementResult(
+                    job.executionId(), "FAILED", e.getMessage(), List.of());
+        } finally {
+            if (workspace != null) {
+                deleteQuietly(workspace);
+            }
+        }
+    }
+
     public ComplexityProfileJavaHarness.HarnessRunResult execute(ComplexityProfileJobPayload job) {
         compileInvocationCount = 0;
         long profileStart = System.nanoTime();
         Path workspace = null;
         try {
             workspace = Files.createTempDirectory("cxe-profile-");
-            CompileOutcome compile = compileOnce(job, workspace);
+            CompileOutcome compile = compileOnce(job.getSourceCode(), job.getQuestionMetadata(), workspace);
             if (!compile.success()) {
                 return ComplexityProfileJavaHarness.HarnessRunResult.compileFailed(compile.message());
             }
@@ -220,9 +267,9 @@ public class ComplexityProfileMeasurementEngine {
         return new InvocationSample(result, elapsed, null);
     }
 
-    private CompileOutcome compileOnce(ComplexityProfileJobPayload job, Path workspace) throws IOException, InterruptedException {
+    private CompileOutcome compileOnce(String sourceCode, QuestionMetadataDto metadata, Path workspace)
+            throws IOException, InterruptedException {
         compileInvocationCount++;
-        QuestionMetadataDto metadata = job.getQuestionMetadata();
         String pkg = metadata.fullyQualifiedPackageName() == null ? "" : metadata.fullyQualifiedPackageName().trim();
         Path sourceDir = workspace;
         if (!pkg.isEmpty()) {
@@ -230,7 +277,7 @@ public class ComplexityProfileMeasurementEngine {
             Files.createDirectories(sourceDir);
         }
         Path sourceFile = sourceDir.resolve("Solution.java");
-        Files.writeString(sourceFile, job.getSourceCode(), StandardCharsets.UTF_8);
+        Files.writeString(sourceFile, sourceCode, StandardCharsets.UTF_8);
 
         List<String> command = new ArrayList<>(runtimeProperties.getRequiredLanguageRuntime("java").compileCommandTokens());
         command.add("-d");
@@ -297,6 +344,109 @@ public class ComplexityProfileMeasurementEngine {
                 throw new IllegalStateException("unreachable");
             }
         }
+    }
+
+    private ComplexityProfileSandboxMeasurementResult sandboxStaticRejected(ComplexityProfileSandboxJobPayload job) {
+        List<SandboxCaseMeasurement> caseResults = new ArrayList<>();
+        for (SandboxProfileCaseRequest profileCase : job.cases()) {
+            caseResults.add(failedSandboxCase(
+                    profileCase, "UNSUPPORTED_MUTABLE_STATIC_STATE", "UNSUPPORTED_MUTABLE_STATIC_STATE", null));
+        }
+        return new ComplexityProfileSandboxMeasurementResult(job.executionId(), "SUCCESS", null, caseResults);
+    }
+
+    private SandboxCaseMeasurement runSandboxCase(
+            Method target,
+            Class<?> solutionClass,
+            ComplexityProfileArgumentMaterializer materializer,
+            ComplexityProfileOutputValidator outputValidator,
+            QuestionMetadataDto metadata,
+            SandboxProfileCaseRequest profileCase,
+            long profileStartNs) {
+        List<Long> samples = new ArrayList<>();
+        int warmups = profileCase.warmups();
+        int measured = profileCase.measuredRepeats();
+        JsonNode lastActual = null;
+        try {
+            for (int i = 0; i < warmups + measured; i++) {
+                if (elapsedMs(profileStartNs) > profileProperties.getLimits().getMaxTotalProfileMs()) {
+                    return failedSandboxCase(profileCase, "PROFILE_TIME_BUDGET", "PROFILE_TIME_BUDGET", lastActual);
+                }
+                Object[] args = materializer.materializeArguments(profileCase.input(), metadata.parameters());
+                var constructor = solutionClass.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                Object solution = constructor.newInstance();
+                InvocationSample sample = invokeTimed(
+                        target,
+                        solution,
+                        args,
+                        profileProperties.getLimits().getPerInvocationTimeoutMs(),
+                        profileProperties.getHarness().isCooperativeInProcessTimeouts());
+                if (sample.errorCode() != null) {
+                    return failedSandboxCase(profileCase, sample.errorCode(), sample.errorCode(), null);
+                }
+                String serialized = outputValidator.serializeForLimitCheck(sample.returnValue());
+                if (serialized.getBytes(StandardCharsets.UTF_8).length
+                        > profileProperties.getLimits().getMaxSerializedOutputBytes()) {
+                    return failedSandboxCase(profileCase, "OUTPUT_TOO_LARGE", "OUTPUT_TOO_LARGE", null);
+                }
+                if (i >= warmups) {
+                    samples.add(sample.elapsedNs());
+                    lastActual = objectMapper.valueToTree(sample.returnValue());
+                }
+                consumeReturnValue(sample.returnValue());
+            }
+            ComplexityProfileTimingStats.Aggregate aggregate = ComplexityProfileTimingStats.fromSamples(samples);
+            return new SandboxCaseMeasurement(
+                    profileCase.caseId(),
+                    profileCase.caseIdentity(),
+                    profileCase.profileCode(),
+                    profileCase.profileVersion(),
+                    profileCase.profileHash(),
+                    profileCase.generatorVersion(),
+                    profileCase.variant(),
+                    profileCase.sizeVector(),
+                    "SUCCESS",
+                    lastActual,
+                    warmups,
+                    aggregate.sampleCount(),
+                    aggregate.medianElapsedNs(),
+                    aggregate.madElapsedNs(),
+                    aggregate.minElapsedNs(),
+                    aggregate.maxElapsedNs(),
+                    null);
+        } catch (ComplexityProfileArgumentMaterializer.UnsupportedMutableInputTypeException e) {
+            return failedSandboxCase(profileCase, "UNSUPPORTED_MUTABLE_INPUT_TYPE", "UNSUPPORTED_MUTABLE_INPUT_TYPE", null);
+        } catch (IllegalArgumentException e) {
+            return failedSandboxCase(profileCase, "INPUT_ERROR", "INPUT_ERROR", null);
+        } catch (Exception e) {
+            return failedSandboxCase(profileCase, "RUNTIME_ERROR", "RUNTIME_ERROR", null);
+        }
+    }
+
+    private static SandboxCaseMeasurement failedSandboxCase(
+            SandboxProfileCaseRequest profileCase,
+            String outcome,
+            String errorCode,
+            JsonNode actualOutput) {
+        return new SandboxCaseMeasurement(
+                profileCase.caseId(),
+                profileCase.caseIdentity(),
+                profileCase.profileCode(),
+                profileCase.profileVersion(),
+                profileCase.profileHash(),
+                profileCase.generatorVersion(),
+                profileCase.variant(),
+                profileCase.sizeVector(),
+                outcome,
+                actualOutput,
+                profileCase.warmups(),
+                0,
+                null,
+                null,
+                null,
+                null,
+                errorCode);
     }
 
     private static ProfileCaseResult failedCase(ProfileCaseRequest profileCase, String outcome, String errorCode) {

@@ -3,6 +3,7 @@ package xyz.hrishabhjoshi.codeexecutionengine.complexityprofile;
 import org.junit.jupiter.api.Test;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,5 +16,7 @@ class ComplexityProfileQueueIsolationTest {
         assertNotEquals("execution:queue", properties.getQueue().getName());
         assertTrue(properties.getQueue().getStatusPrefix().contains("complexity-profile"));
         assertTrue(properties.getQueue().getResultPrefix().contains("complexity-profile"));
+        assertTrue(properties.getSandbox().getMaxConcurrentJobs() > 0);
+        assertEquals("cxe-complexity-profile-executor", properties.getSandbox().getJobServiceAccountName());
     }
 }

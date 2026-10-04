@@ -69,4 +69,13 @@ public class RedisConfig {
         template.afterPropertiesSet();
         return template;
     }
+
+    @Bean
+    public org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate(
+            RedisConnectionFactory connectionFactory) {
+        org.springframework.data.redis.core.StringRedisTemplate template =
+                new org.springframework.data.redis.core.StringRedisTemplate();
+        template.setConnectionFactory(connectionFactory);
+        return template;
+    }
 }

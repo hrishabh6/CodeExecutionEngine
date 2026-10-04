@@ -21,6 +21,10 @@ public class ComplexityProfileOutputValidator {
         return judgingSemantics.matches(actual, expectedOutput, metadata);
     }
 
+    public boolean matchesExpected(JsonNode actualNode, JsonNode expectedOutput, QuestionMetadataDto metadata) {
+        return judgingSemantics.matchesJson(actualNode, expectedOutput, metadata);
+    }
+
     public String serializeForLimitCheck(Object actual) {
         JsonNode node = objectMapper.valueToTree(actual);
         return node.toString();

@@ -21,6 +21,7 @@ public class ComplexityProfileWorkerService {
 
     private final ComplexityProfileQueueService queueService;
     private final ComplexityProfileJavaHarness harness;
+    private final ComplexityProfileKubernetesJobService kubernetesJobService;
     private final ComplexityProfileExecutionProperties properties;
 
     private volatile boolean running = true;
@@ -55,7 +56,12 @@ public class ComplexityProfileWorkerService {
         log.info("[PROFILE-WORKER] {} processing executionId={}", workerId, executionId);
         queueService.setStatus(executionId, new ComplexityProfilePollResponse(
                 executionId, "RUNNING", null, null, null, null, null, null, null, null, null));
+        if (properties.getSandbox().isKubernetesJobBackend()) {
+            kubernetesJobService.runIsolated(job);
+            return;
+        }
         HarnessRunResult result = harness.execute(job);
+        String profilerRuntime = "cxe-local-process-v1";
         ComplexityProfilePollResponse terminal = new ComplexityProfilePollResponse(
                 executionId,
                 "COMPLETED",
@@ -63,7 +69,7 @@ public class ComplexityProfileWorkerService {
                 System.getProperty("java.version"),
                 properties.getHarnessVersion(),
                 properties.getMeasurementPolicyVersion(),
-                "cxe-local-process-v1",
+                profilerRuntime,
                 ComplexityProfileEnvironmentFingerprint.build(properties),
                 result.cases(),
                 result.compileStatus().equals("SUCCESS") ? null : "COMPILE_FAILED",

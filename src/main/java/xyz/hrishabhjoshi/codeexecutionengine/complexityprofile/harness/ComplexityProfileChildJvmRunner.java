@@ -1,6 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.harness;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,11 @@ public class ComplexityProfileChildJvmRunner {
             Path resultFile = workspace.resolve("result.json");
             Path propsFile = workspace.resolve("props.json");
             objectMapper.writeValue(jobFile.toFile(), job);
-            objectMapper.writeValue(propsFile.toFile(), profileProperties);
+            ObjectNode propsNode = (ObjectNode) objectMapper.valueToTree(profileProperties);
+            ObjectNode harnessNode = propsNode.with("harness");
+            harnessNode.put("useChildJvm", false);
+            harnessNode.put("cooperativeInProcessTimeouts", true);
+            objectMapper.writeValue(propsFile.toFile(), propsNode);
 
             List<String> command = new ArrayList<>();
             command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
@@ -56,20 +61,20 @@ public class ComplexityProfileChildJvmRunner {
             String output = readProcessOutput(process);
             boolean finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS);
             if (!finished) {
-                process.destroyForcibly();
+                destroyProcessTree(process);
                 process.waitFor(2, TimeUnit.SECONDS);
                 log.warn("[PROFILE-CHILD] executionId={} forcibly terminated after {} ms", job.getExecutionId(), timeoutMs);
                 return ComplexityProfileJavaHarness.HarnessRunResult.childTimedOut();
+            }
+            if (Files.exists(resultFile)) {
+                return objectMapper.readValue(resultFile.toFile(), ComplexityProfileJavaHarness.HarnessRunResult.class);
             }
             if (process.exitValue() != 0) {
                 log.warn("[PROFILE-CHILD] executionId={} exit={} outputLen={}",
                         job.getExecutionId(), process.exitValue(), output.length());
                 return ComplexityProfileJavaHarness.HarnessRunResult.internalFailed("CHILD_JVM_FAILED");
             }
-            if (!Files.exists(resultFile)) {
-                return ComplexityProfileJavaHarness.HarnessRunResult.internalFailed("CHILD_JVM_NO_RESULT");
-            }
-            return objectMapper.readValue(resultFile.toFile(), ComplexityProfileJavaHarness.HarnessRunResult.class);
+            return ComplexityProfileJavaHarness.HarnessRunResult.internalFailed("CHILD_JVM_NO_RESULT");
         } catch (Exception e) {
             log.warn("[PROFILE-CHILD] executionId={} error: {}", job.getExecutionId(), e.getMessage());
             return ComplexityProfileJavaHarness.HarnessRunResult.internalFailed(e.getMessage());
@@ -82,5 +87,10 @@ public class ComplexityProfileChildJvmRunner {
 
     private static String readProcessOutput(Process process) throws IOException {
         return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    private static void destroyProcessTree(Process process) {
+        process.destroyForcibly();
+        ProcessHandle.of(process.pid()).ifPresent(handle -> handle.descendants().forEach(ph -> ph.destroyForcibly()));
     }
 }

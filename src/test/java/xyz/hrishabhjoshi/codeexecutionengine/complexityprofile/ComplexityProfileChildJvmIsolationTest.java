@@ -17,6 +17,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.service.utils.ManagedProcessRunner;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,19 +49,24 @@ class ComplexityProfileChildJvmIsolationTest {
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     void nonTerminatingCandidateDoesNotBlockSubsequentProfiles() {
-        HarnessRunResult hung = harness.execute(infiniteLoopJob());
+        HarnessRunResult hung = harness.execute(infiniteLoopJob("hung-" + UUID.randomUUID()));
         assertTrue(hung.compileStatus().equals("FAILED") || hung.cases().stream()
                 .anyMatch(c -> "TIMEOUT".equals(c.outcome()) || "TIMEOUT".equals(c.errorCode())
                         || "PROFILE_CHILD_TIMEOUT".equals(hung.errorMessage())),
                 "expected timeout outcome, got " + hung);
 
-        HarnessRunResult healthy = harness.execute(fastJob());
-        assertEquals("SUCCESS", healthy.compileStatus());
+        try {
+            Thread.sleep(2_000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        HarnessRunResult healthy = harness.execute(fastJob("ok-" + UUID.randomUUID()));
+        assertEquals("SUCCESS", healthy.compileStatus(), healthy.errorMessage());
         assertEquals("SUCCESS", healthy.cases().getFirst().outcome());
     }
 
-    private ComplexityProfileJobPayload infiniteLoopJob() {
-        return baseJob("""
+    private ComplexityProfileJobPayload infiniteLoopJob(String executionId) {
+        return baseJob(executionId, """
                 public class Solution {
                   public int sum(int[] nums) {
                     while (true) { /* non-terminating */ }
@@ -70,8 +76,8 @@ class ComplexityProfileChildJvmIsolationTest {
                 """, 0, 1);
     }
 
-    private ComplexityProfileJobPayload fastJob() {
-        return baseJob("""
+    private ComplexityProfileJobPayload fastJob(String executionId) {
+        return baseJob(executionId, """
                 public class Solution {
                   public int sum(int[] nums) {
                     return 7;
@@ -80,14 +86,14 @@ class ComplexityProfileChildJvmIsolationTest {
                 """, 0, 2);
     }
 
-    private ComplexityProfileJobPayload baseJob(String source, int warmups, int measured) {
+    private ComplexityProfileJobPayload baseJob(String executionId, String source, int warmups, int measured) {
         var expected = objectMapper.valueToTree(7);
         ArrayNodeHelper input = new ArrayNodeHelper(objectMapper);
         ProfileCaseRequest profileCase = new ProfileCaseRequest(
                 "c1", "id1", "P", "v1", "hash", "gv1", "RANDOM", Map.of("n", 4), "seed",
                 input.arrayInput(4), "ih", expected, warmups, measured);
         return ComplexityProfileJobPayload.builder()
-                .executionId("exec-child-" + source.hashCode())
+                .executionId(executionId)
                 .submissionId("sub")
                 .questionId(1L)
                 .language("JAVA")

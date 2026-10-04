@@ -23,6 +23,10 @@ public final class ProfileJudgingSemantics {
 
     public boolean matches(Object actualReturnValue, JsonNode expectedOutput, QuestionMetadataDto metadata) {
         JsonNode actualNode = objectMapper.valueToTree(actualReturnValue);
+        return matchesJson(actualNode, expectedOutput, metadata);
+    }
+
+    public boolean matchesJson(JsonNode actualNode, JsonNode expectedOutput, QuestionMetadataDto metadata) {
         JsonNode normalizedActual = normalize(actualNode, metadata);
         JsonNode normalizedExpected = normalize(expectedOutput.deepCopy(), metadata);
         return compare(normalizedActual, normalizedExpected, metadata);

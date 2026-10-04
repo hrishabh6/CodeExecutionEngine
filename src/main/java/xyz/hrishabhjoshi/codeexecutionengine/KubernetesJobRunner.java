@@ -11,6 +11,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
 import xyz.hrishabhjoshi.codeexecutionengine.execution.PlaygroundProgramExecutor;
 import xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice.ExecutionPayloadCodec;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionJobResultStore;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.service.ComplexityProfileKubernetesJobRunner;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.PlaygroundJobResultStore;
 
 @Slf4j
@@ -24,6 +25,7 @@ public class KubernetesJobRunner implements CommandLineRunner {
     private final ExecutionJobResultStore resultStore;
     private final PlaygroundJobResultStore playgroundJobResultStore;
     private final PlaygroundProgramExecutor playgroundProgramExecutor;
+    private final ComplexityProfileKubernetesJobRunner complexityProfileKubernetesJobRunner;
     private final ConfigurableApplicationContext applicationContext;
 
     @Value("${execution.mode:worker}")
@@ -42,6 +44,17 @@ public class KubernetesJobRunner implements CommandLineRunner {
         String executionId = "unknown";
 
         try {
+            String jobKind = System.getenv("EXECUTION_JOB_KIND");
+            if ("COMPLEXITY_PROFILE".equalsIgnoreCase(jobKind)) {
+                String profileExecutionId = System.getenv("COMPLEXITY_PROFILE_EXECUTION_ID");
+                if (profileExecutionId == null || profileExecutionId.isBlank()) {
+                    throw new IllegalStateException("COMPLEXITY_PROFILE_EXECUTION_ID is required");
+                }
+                executionId = profileExecutionId;
+                exitCode = complexityProfileKubernetesJobRunner.runOneShot(profileExecutionId);
+                return;
+            }
+
             if (payloadBase64 == null || payloadBase64.isBlank()) {
                 throw new IllegalStateException("execution.job.payload-b64 must be provided in job-runner mode");
             }

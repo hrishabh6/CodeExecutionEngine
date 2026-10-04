@@ -43,6 +43,17 @@ class ComplexityProfileRequestValidatorTest {
         assertDoesNotThrow(() -> validator.validate(baseRequest(3, 5)));
     }
 
+    @Test
+    void rejectsKubernetesBackendWithoutProductionVerified() {
+        ComplexityProfileExecutionProperties properties = new ComplexityProfileExecutionProperties();
+        properties.setEnabled(true);
+        properties.setHarnessVersion("v1");
+        properties.getSandbox().setBackend("kubernetes-job");
+        properties.getSandbox().setProductionVerified(false);
+        ComplexityProfileRequestValidator k8sValidator = new ComplexityProfileRequestValidator(properties);
+        assertThrows(ExecutionRequestRejectedException.class, () -> k8sValidator.validate(baseRequest(1, 2)));
+    }
+
     private ComplexityProfileSubmitRequest baseRequest(int warmups, int measured) {
         ArrayNode input = objectMapper.createArrayNode().add(objectMapper.createArrayNode().add(1));
         var expected = objectMapper.valueToTree(42);
