@@ -45,6 +45,38 @@ execution:
     job-result-prefix: "execution:job-result:"
     job-result-ttl-seconds: ${KUBERNETES_JOB_RESULT_TTL_SECONDS:600}
     playground-job-result-prefix: ${EXECUTION_PLAYGROUND_JOB_RESULT_PREFIX:execution:playground-job-result:}
+  complexity-profile:
+    enabled: ${EXECUTION_COMPLEXITY_PROFILE_ENABLED:false}
+    internal-service-token: ${INTERNAL_SERVICE_TOKEN:}
+    internal-auth-require-token: ${EXECUTION_COMPLEXITY_PROFILE_INTERNAL_AUTH_REQUIRE_TOKEN:false}
+    harness-version: v1
+    measurement-policy-version: v1
+    queue:
+      name: execution:complexity-profile:queue
+      status-prefix: execution:complexity-profile:status:
+      result-prefix: execution:complexity-profile:result:
+      job-payload-prefix: execution:complexity-profile:job:
+      status-ttl-seconds: 3600
+      result-ttl-seconds: 3600
+      queued-job-max-age-seconds: 3600
+    harness:
+      use-child-jvm: true
+      child-jvm-grace-ms: 15000
+      cooperative-in-process-timeouts: false
+    worker:
+      count: ${EXECUTION_COMPLEXITY_PROFILE_WORKER_COUNT:2}
+      queue-capacity: ${EXECUTION_COMPLEXITY_PROFILE_QUEUE_CAPACITY:50}
+    limits:
+      max-cases: 32
+      max-warmups-per-case: 10
+      max-measured-repeats-per-case: 20
+      max-source-bytes: 65536
+      per-invocation-timeout-ms: ${EXECUTION_COMPLEXITY_PROFILE_INVOCATION_TIMEOUT_MS:5000}
+      max-total-profile-ms: ${EXECUTION_COMPLEXITY_PROFILE_MAX_TOTAL_MS:120000}
+    sandbox:
+      backend: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_BACKEND:local-process}
+      production-verified: ${EXECUTION_COMPLEXITY_PROFILE_PRODUCTION_VERIFIED:false}
+      trusted-development-only: true
   playground:
     enabled: ${EXECUTION_PLAYGROUND_ENABLED:false}
     execution-timeout-seconds: ${EXECUTION_PLAYGROUND_TIMEOUT_SECONDS:5}

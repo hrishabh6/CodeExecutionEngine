@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.service.ComplexityProfileWorkerService;
+import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionWorkerService;
 
 /**
@@ -16,6 +18,8 @@ import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionWork
 public class WorkerBootstrap implements CommandLineRunner {
 
     private final ExecutionWorkerService workerService;
+    private final ComplexityProfileWorkerService profileWorkerService;
+    private final ComplexityProfileExecutionProperties complexityProfileProperties;
 
     @Value("${execution.worker.count:5}")
     private int workerCount;
@@ -51,6 +55,15 @@ public class WorkerBootstrap implements CommandLineRunner {
 
         log.info("==============================================");
         log.info("[BOOTSTRAP] All {} workers launched!", workerCount);
+
+        if (complexityProfileProperties.isEnabled()) {
+            int profileWorkers = complexityProfileProperties.getWorker().getCount();
+            log.info("[BOOTSTRAP] Launching {} complexity profile workers", profileWorkers);
+            for (int i = 1; i <= profileWorkers; i++) {
+                profileWorkerService.startWorker("profile-worker-" + i);
+            }
+        }
+
         log.info("[BOOTSTRAP] CXE is ready to accept submissions");
         log.info("==============================================");
     }
