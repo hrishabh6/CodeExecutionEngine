@@ -6,6 +6,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityPro
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileExecutionDtos.ComplexityProfileSubmitRequest;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileExecutionDtos.ComplexityProfileSubmitResponse;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileJobPayload;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.metrics.ComplexityProfileMetrics;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
 
 import java.util.Optional;
@@ -18,6 +19,7 @@ public class ComplexityProfileOrchestrationService {
     private final ComplexityProfileRequestValidator requestValidator;
     private final ComplexityProfileQueueService queueService;
     private final ComplexityProfileExecutionProperties properties;
+    private final ComplexityProfileMetrics complexityProfileMetrics;
 
     public ComplexityProfileSubmitResponse submit(ComplexityProfileSubmitRequest request) {
         requestValidator.validate(request);
@@ -42,7 +44,14 @@ public class ComplexityProfileOrchestrationService {
                 .build();
         ComplexityProfileQueueService.EnqueueOutcome outcome = queueService.tryEnqueue(payload);
         if (outcome == ComplexityProfileQueueService.EnqueueOutcome.ALREADY_ACCEPTED) {
+            complexityProfileMetrics.recordProfileSubmission("ALREADY_ACCEPTED");
             return existingSubmitResponse(executionId);
+        }
+        if (outcome == ComplexityProfileQueueService.EnqueueOutcome.QUEUE_FULL) {
+            complexityProfileMetrics.recordQueueFull();
+            complexityProfileMetrics.recordProfileSubmission("QUEUE_FULL");
+        } else {
+            complexityProfileMetrics.recordProfileSubmission("QUEUED");
         }
         return new ComplexityProfileSubmitResponse(executionId, "QUEUED");
     }

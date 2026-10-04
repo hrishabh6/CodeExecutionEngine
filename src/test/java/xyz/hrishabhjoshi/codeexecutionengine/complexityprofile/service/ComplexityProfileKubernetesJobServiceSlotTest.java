@@ -37,6 +37,8 @@ class ComplexityProfileKubernetesJobServiceSlotTest {
     private ComplexityProfileTrustedOracleStore oracleStore;
     @Mock
     private ComplexityProfileTrustedResultAssembler resultAssembler;
+    @Mock
+    private xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.metrics.ComplexityProfileMetrics complexityProfileMetrics;
 
     @InjectMocks
     private ComplexityProfileKubernetesJobService service;

@@ -12,6 +12,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityPro
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileJobPayload;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileSandboxDtos.ComplexityProfileSandboxMeasurementResult;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileSandboxDtos.ComplexityProfileTrustedOracleBundle;
+import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.metrics.ComplexityProfileMetrics;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.support.ComplexityProfileEnvironmentFingerprint;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.config.KubernetesExecutionProperties;
@@ -37,6 +38,7 @@ public class ComplexityProfileKubernetesJobService {
     private final ComplexityProfileSandboxRedisStore sandboxRedisStore;
     private final ComplexityProfileTrustedOracleStore oracleStore;
     private final ComplexityProfileTrustedResultAssembler resultAssembler;
+    private final ComplexityProfileMetrics complexityProfileMetrics;
 
     @Value("${spring.data.redis.host:redis}")
     private String redisHost;
@@ -60,11 +62,13 @@ public class ComplexityProfileKubernetesJobService {
         }
         Optional<Integer> slot = slotRegistry.tryAcquire(executionId);
         if (slot.isEmpty()) {
+            complexityProfileMetrics.recordConcurrencyCapRejection();
             storeWorkerFailure(executionId, "PROFILE_CONCURRENT_JOB_CAP");
             return;
         }
         if (!activeJobGuard.hasCapacity()) {
             slotRegistry.release(executionId, slot);
+            complexityProfileMetrics.recordConcurrencyCapRejection();
             storeWorkerFailure(executionId, "PROFILE_CONCURRENT_JOB_CAP");
             return;
         }

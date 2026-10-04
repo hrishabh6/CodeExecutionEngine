@@ -44,7 +44,7 @@ execution:
     status-ttl-seconds: 3600
     job-result-prefix: "execution:job-result:"
     job-result-ttl-seconds: ${KUBERNETES_JOB_RESULT_TTL_SECONDS:600}
-    playground-job-result-prefix: ${EXECUTION_PLAYGROUND_JOB_RESULT_PREFIX:execution:playground-job-result:}
+    playground-job-result-prefix: "${EXECUTION_PLAYGROUND_JOB_RESULT_PREFIX:execution:playground-job-result:}"
   complexity-profile:
     enabled: ${EXECUTION_COMPLEXITY_PROFILE_ENABLED:false}
     internal-service-token: ${INTERNAL_SERVICE_TOKEN:}
@@ -53,9 +53,9 @@ execution:
     measurement-policy-version: v1
     queue:
       name: execution:complexity-profile:queue
-      status-prefix: execution:complexity-profile:status:
-      result-prefix: execution:complexity-profile:result:
-      job-payload-prefix: execution:complexity-profile:job:
+      status-prefix: "execution:complexity-profile:status:"
+      result-prefix: "execution:complexity-profile:result:"
+      job-payload-prefix: "execution:complexity-profile:job:"
       status-ttl-seconds: 3600
       result-ttl-seconds: 3600
       queued-job-max-age-seconds: 3600
@@ -83,9 +83,9 @@ execution:
       job-completion-timeout-seconds: ${EXECUTION_COMPLEXITY_PROFILE_JOB_COMPLETION_TIMEOUT_SECONDS:200}
       ttl-seconds-after-finished: ${EXECUTION_COMPLEXITY_PROFILE_JOB_TTL_SECONDS:300}
       termination-grace-period-seconds: ${EXECUTION_COMPLEXITY_PROFILE_JOB_TERMINATION_GRACE_SECONDS:5}
-      sandbox-redis-key-prefix: execution:complexity-profile:sandbox:
-      trusted-oracle-key-prefix: execution:complexity-profile:trusted:oracle:
-      slot-key-prefix: execution:complexity-profile:slot:
+      sandbox-redis-key-prefix: "execution:complexity-profile:sandbox:"
+      trusted-oracle-key-prefix: "execution:complexity-profile:trusted:oracle:"
+      slot-key-prefix: "execution:complexity-profile:slot:"
       slot-ttl-grace-seconds: 120
       sandbox-redis-username: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_REDIS_USERNAME:}
       sandbox-redis-password: ${EXECUTION_COMPLEXITY_PROFILE_SANDBOX_REDIS_PASSWORD:}

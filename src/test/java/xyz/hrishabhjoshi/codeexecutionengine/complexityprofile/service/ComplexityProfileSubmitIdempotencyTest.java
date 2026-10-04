@@ -24,12 +24,15 @@ class ComplexityProfileSubmitIdempotencyTest {
     private ComplexityProfileQueueService queueService;
     @Mock
     private ComplexityProfileExecutionProperties properties;
+    @Mock
+    private xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.metrics.ComplexityProfileMetrics complexityProfileMetrics;
 
     private ComplexityProfileOrchestrationService orchestrationService;
 
     @BeforeEach
     void setUp() {
-        orchestrationService = new ComplexityProfileOrchestrationService(requestValidator, queueService, properties);
+        orchestrationService = new ComplexityProfileOrchestrationService(
+                requestValidator, queueService, properties, complexityProfileMetrics);
     }
 
     @Test
