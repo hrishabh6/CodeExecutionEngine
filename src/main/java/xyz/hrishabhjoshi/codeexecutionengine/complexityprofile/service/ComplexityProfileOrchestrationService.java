@@ -21,7 +21,12 @@ public class ComplexityProfileOrchestrationService {
 
     public ComplexityProfileSubmitResponse submit(ComplexityProfileSubmitRequest request) {
         requestValidator.validate(request);
-        String executionId = UUID.randomUUID().toString();
+        String executionId = request.executionId() != null && !request.executionId().isBlank()
+                ? request.executionId().trim()
+                : UUID.randomUUID().toString();
+        if (queueService.hasAcceptedExecution(executionId)) {
+            return existingSubmitResponse(executionId);
+        }
         ComplexityProfileJobPayload payload = ComplexityProfileJobPayload.builder()
                 .executionId(executionId)
                 .submissionId(request.submissionId())
@@ -35,8 +40,17 @@ public class ComplexityProfileOrchestrationService {
                 .harnessVersion(request.harnessVersion())
                 .cases(request.cases())
                 .build();
-        queueService.enqueue(payload);
+        ComplexityProfileQueueService.EnqueueOutcome outcome = queueService.tryEnqueue(payload);
+        if (outcome == ComplexityProfileQueueService.EnqueueOutcome.ALREADY_ACCEPTED) {
+            return existingSubmitResponse(executionId);
+        }
         return new ComplexityProfileSubmitResponse(executionId, "QUEUED");
+    }
+
+    private ComplexityProfileSubmitResponse existingSubmitResponse(String executionId) {
+        return queueService.getStatus(executionId)
+                .map(s -> new ComplexityProfileSubmitResponse(executionId, s.status()))
+                .orElseGet(() -> new ComplexityProfileSubmitResponse(executionId, "QUEUED"));
     }
 
     public Optional<ComplexityProfilePollResponse> poll(String executionId) {

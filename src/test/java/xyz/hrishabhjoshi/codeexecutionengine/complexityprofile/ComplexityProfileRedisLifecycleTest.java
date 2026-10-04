@@ -9,7 +9,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileJobPayload;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.service.ComplexityProfileQueueService;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
@@ -31,6 +33,8 @@ class ComplexityProfileRedisLifecycleTest {
     private ValueOperations<String, Object> valueOperations;
     @Mock
     private ListOperations<String, Object> listOperations;
+    @Mock
+    private StringRedisTemplate stringRedisTemplate;
 
     private ComplexityProfileQueueService queueService;
     private ComplexityProfileExecutionProperties properties;
@@ -41,11 +45,14 @@ class ComplexityProfileRedisLifecycleTest {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(redisTemplate.opsForList()).thenReturn(listOperations);
         lenient().when(listOperations.size(anyString())).thenReturn(0L);
-        queueService = new ComplexityProfileQueueService(redisTemplate, new ObjectMapper(), properties);
+        lenient().when(stringRedisTemplate.execute(
+                any(RedisScript.class), anyList(), any(), any(), any(), any(), any(), any())).thenReturn(1L);
+        queueService = new ComplexityProfileQueueService(
+                redisTemplate, stringRedisTemplate, new ObjectMapper(), properties);
     }
 
     @Test
-    void statusAndJobPayloadRecordsUseTtl() {
+    void enqueueUsesAtomicAcceptScript() {
         ComplexityProfileJobPayload payload = ComplexityProfileJobPayload.builder()
                 .executionId("exec-ttl")
                 .submissionId("sub")
@@ -54,21 +61,8 @@ class ComplexityProfileRedisLifecycleTest {
                 .sourceCode("class Solution {}")
                 .build();
         queueService.enqueue(payload);
-
-        ArgumentCaptor<Long> ttlCaptor = ArgumentCaptor.forClass(Long.class);
-        verify(valueOperations, atLeastOnce()).set(
-                startsWith(properties.getQueue().getStatusPrefix()),
-                any(),
-                ttlCaptor.capture(),
-                eq(TimeUnit.SECONDS));
-        assertTrue(ttlCaptor.getAllValues().stream()
-                .anyMatch(v -> v.equals(properties.getQueue().getStatusTtlSeconds())));
-
-        verify(valueOperations).set(
-                eq(properties.getQueue().getJobPayloadPrefix() + "exec-ttl"),
-                eq(payload),
-                eq(properties.getQueue().getQueuedJobMaxAgeSeconds()),
-                eq(TimeUnit.SECONDS));
+        verify(stringRedisTemplate).execute(
+                any(RedisScript.class), anyList(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

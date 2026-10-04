@@ -37,6 +37,8 @@ public class ComplexityProfileExecutionProperties {
         private String statusPrefix = "execution:complexity-profile:status:";
         private String resultPrefix = "execution:complexity-profile:result:";
         private String jobPayloadPrefix = "execution:complexity-profile:job:";
+        /** Worker-only accept-once marker; set atomically with queue insert. */
+        private String acceptPrefix = "execution:complexity-profile:accept:";
         private long statusTtlSeconds = 3600;
         private long resultTtlSeconds = 3600;
         /** Max age for queued payloads; stale jobs are dropped without execution. */

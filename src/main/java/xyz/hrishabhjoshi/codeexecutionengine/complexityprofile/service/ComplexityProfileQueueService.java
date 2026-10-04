@@ -5,12 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileExecutionDtos.ComplexityProfilePollResponse;
 import xyz.hrishabhjoshi.codeexecutionengine.complexityprofile.dto.ComplexityProfileJobPayload;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.execution.ExecutionRequestRejectedException;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -20,31 +24,112 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class ComplexityProfileQueueService {
 
+    /**
+     * Atomically: reject if already accepted, reject if queue full, else set accept + status + job payload + LPUSH.
+     * KEYS[1]=accept, [2]=status, [3]=job, [4]=result, [5]=queue
+     * ARGV[1]=statusJson, [2]=jobJson, [3]=executionId, [4]=statusTtlSec, [5]=jobTtlSec, [6]=queueCapacity
+     * Returns: 1=new accept, 0=already accepted, -1=queue full
+     */
+    private static final RedisScript<Long> ATOMIC_ACCEPT_AND_ENQUEUE = new DefaultRedisScript<>(
+            """
+            if redis.call('exists', KEYS[1]) == 1 then
+              if redis.call('exists', KEYS[2]) == 1
+                  or redis.call('exists', KEYS[3]) == 1
+                  or redis.call('exists', KEYS[4]) == 1 then
+                return 0
+              end
+              redis.call('del', KEYS[1])
+            end
+            if redis.call('exists', KEYS[2]) == 1 then return 0 end
+            if redis.call('exists', KEYS[3]) == 1 then return 0 end
+            if redis.call('exists', KEYS[4]) == 1 then return 0 end
+            local depth = redis.call('llen', KEYS[5])
+            if depth >= tonumber(ARGV[6]) then return -1 end
+            redis.call('set', KEYS[1], '1', 'EX', ARGV[4])
+            redis.call('set', KEYS[2], ARGV[1], 'EX', ARGV[4])
+            redis.call('set', KEYS[3], ARGV[2], 'EX', ARGV[5])
+            redis.call('lpush', KEYS[5], ARGV[3])
+            return 1
+            """,
+            Long.class);
+
+    public enum EnqueueOutcome {
+        ACCEPTED_NEW,
+        ALREADY_ACCEPTED,
+        QUEUE_FULL
+    }
+
     private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final ComplexityProfileExecutionProperties properties;
 
+    public boolean hasAcceptedExecution(String executionId) {
+        if (executionId == null || executionId.isBlank()) {
+            return false;
+        }
+        String acceptKey = acceptKey(executionId);
+        if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(acceptKey))) {
+            if (getStatus(executionId).isPresent() || getResult(executionId).isPresent()) {
+                return true;
+            }
+            String jobKey = properties.getQueue().getJobPayloadPrefix() + executionId;
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(jobKey))) {
+                return true;
+            }
+            stringRedisTemplate.delete(acceptKey);
+        }
+        String jobKey = properties.getQueue().getJobPayloadPrefix() + executionId;
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(jobKey))) {
+            return true;
+        }
+        return getStatus(executionId).isPresent() || getResult(executionId).isPresent();
+    }
+
     public String enqueue(ComplexityProfileJobPayload payload) {
-        Long depth = redisTemplate.opsForList().size(properties.getQueue().getName());
-        if (depth != null && depth >= properties.getWorker().getQueueCapacity()) {
+        EnqueueOutcome outcome = tryEnqueue(payload);
+        if (outcome == EnqueueOutcome.QUEUE_FULL) {
             throw new ExecutionRequestRejectedException("PROFILE_QUEUE_FULL", "Complexity profile queue is full");
         }
+        return payload.getExecutionId();
+    }
+
+    public EnqueueOutcome tryEnqueue(ComplexityProfileJobPayload payload) {
         String executionId = payload.getExecutionId();
         if (executionId == null || executionId.isBlank()) {
             executionId = UUID.randomUUID().toString();
             payload.setExecutionId(executionId);
         }
         payload.setEnqueuedAtMs(System.currentTimeMillis());
-        setStatus(executionId, new ComplexityProfilePollResponse(
-                executionId, "QUEUED", null, null, null, null, null, null, null, null, null));
-        String jobKey = properties.getQueue().getJobPayloadPrefix() + executionId;
-        redisTemplate.opsForValue().set(
-                jobKey,
-                payload,
-                properties.getQueue().getQueuedJobMaxAgeSeconds(),
-                TimeUnit.SECONDS);
-        redisTemplate.opsForList().leftPush(properties.getQueue().getName(), executionId);
-        return executionId;
+        ComplexityProfilePollResponse queuedStatus = new ComplexityProfilePollResponse(
+                executionId, "QUEUED", null, null, null, null, null, null, null, null, null);
+        try {
+            String statusJson = objectMapper.writeValueAsString(queuedStatus);
+            String jobJson = objectMapper.writeValueAsString(payload);
+            Long result = stringRedisTemplate.execute(
+                    ATOMIC_ACCEPT_AND_ENQUEUE,
+                    List.of(
+                            acceptKey(executionId),
+                            properties.getQueue().getStatusPrefix() + executionId,
+                            properties.getQueue().getJobPayloadPrefix() + executionId,
+                            properties.getQueue().getResultPrefix() + executionId,
+                            properties.getQueue().getName()),
+                    statusJson,
+                    jobJson,
+                    executionId,
+                    String.valueOf(acceptMarkerTtlSeconds()),
+                    String.valueOf(properties.getQueue().getQueuedJobMaxAgeSeconds()),
+                    String.valueOf(properties.getWorker().getQueueCapacity()));
+            if (result == null || result == 0L) {
+                return EnqueueOutcome.ALREADY_ACCEPTED;
+            }
+            if (result < 0L) {
+                return EnqueueOutcome.QUEUE_FULL;
+            }
+            return EnqueueOutcome.ACCEPTED_NEW;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize profile queue payload", e);
+        }
     }
 
     public ComplexityProfileJobPayload dequeue(long timeoutSeconds) {
@@ -136,6 +221,18 @@ public class ComplexityProfileQueueService {
         return deserialize(value, ComplexityProfilePollResponse.class);
     }
 
+    private String acceptKey(String executionId) {
+        return properties.getQueue().getAcceptPrefix() + executionId;
+    }
+
+    /** Accept/status TTL aligned with the longest bounded execution artifact TTL. */
+    long acceptMarkerTtlSeconds() {
+        ComplexityProfileExecutionProperties.Queue queue = properties.getQueue();
+        return Math.max(
+                queue.getStatusTtlSeconds(),
+                Math.max(queue.getResultTtlSeconds(), queue.getQueuedJobMaxAgeSeconds()));
+    }
+
     private <T> Optional<T> deserialize(Object value, Class<T> type) {
         if (value == null) {
             return Optional.empty();
@@ -144,7 +241,7 @@ public class ComplexityProfileQueueService {
             return Optional.of(type.cast(value));
         }
         try {
-            String json = objectMapper.writeValueAsString(value);
+            String json = value instanceof String s ? s : objectMapper.writeValueAsString(value);
             return Optional.of(objectMapper.readValue(json, type));
         } catch (JsonProcessingException e) {
             log.error("[PROFILE-QUEUE] deserialize failure for {}", type.getSimpleName(), e);

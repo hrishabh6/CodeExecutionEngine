@@ -61,6 +61,7 @@ class ComplexityProfileRequestValidatorTest {
                 "c1", "id1", "P", "v1", "hash", "gv1", "RANDOM", Map.of("n", 1), "seed",
                 input, "ih", expected, warmups, measured);
         return new ComplexityProfileSubmitRequest(
+                "exec-idempotent-1",
                 "sub",
                 1L,
                 "JAVA",

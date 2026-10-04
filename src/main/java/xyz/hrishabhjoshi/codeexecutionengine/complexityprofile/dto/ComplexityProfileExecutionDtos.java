@@ -15,6 +15,8 @@ public final class ComplexityProfileExecutionDtos {
     }
 
     public record ComplexityProfileSubmitRequest(
+            /** Client-provided idempotency key; when set, resubmit returns the same logical execution. */
+            String executionId,
             @NotBlank String submissionId,
             @NotNull Long questionId,
             @NotBlank String language,
