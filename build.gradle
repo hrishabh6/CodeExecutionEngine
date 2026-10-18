@@ -62,6 +62,16 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+tasks.register('copyRunnerLibs', Copy) {
+    into layout.buildDirectory.dir('runner-libs')
+    from(configurations.runtimeClasspath) {
+        include 'jackson-annotations-*.jar'
+        include 'jackson-core-*.jar'
+        include 'jackson-databind-*.jar'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 tasks.named('test') {
     useJUnitPlatform()
 }

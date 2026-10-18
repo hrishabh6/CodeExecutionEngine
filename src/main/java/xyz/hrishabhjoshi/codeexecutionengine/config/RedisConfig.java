@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,11 +17,30 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.time.Duration;
+
 /**
  * Redis configuration for queue and caching.
  */
 @Configuration
 public class RedisConfig {
+
+    @Value("${execution.worker.poll-timeout-seconds:5}")
+    private long pollTimeoutSeconds;
+
+    /**
+     * Lettuce cancels a command at this timeout. BRPOP waits for
+     * {@code pollTimeoutSeconds}, so the client timeout must be longer or
+     * every empty poll is reported as a command timeout.
+     */
+    static Duration blockingCommandTimeout(Duration configured, long pollTimeoutSeconds) {
+        long pollSeconds = Math.max(pollTimeoutSeconds, 0);
+        Duration minimum = Duration.ofSeconds(pollSeconds).plusSeconds(2);
+        if (configured == null || configured.compareTo(minimum) < 0) {
+            return minimum;
+        }
+        return configured;
+    }
 
     @Bean
     public RedisConnectionFactory redisConnectionFactory(RedisProperties properties) {
@@ -37,7 +57,7 @@ public class RedisConfig {
         config.setDatabase(properties.getDatabase());
 
         LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-                .commandTimeout(properties.getTimeout())
+                .commandTimeout(blockingCommandTimeout(properties.getTimeout(), pollTimeoutSeconds))
                 .build();
 
         return new LettuceConnectionFactory(config, clientConfig);

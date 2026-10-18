@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.config.KubernetesExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.config.PlaygroundSandboxProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.config.RunnerClasspath;
 import xyz.hrishabhjoshi.codeexecutionengine.service.execution.SandboxedKubernetesJobBuilder;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
@@ -200,6 +201,7 @@ public class KubernetesJobExecutor implements CodeExecutor {
                                 .addNewEnv().withName("EXECUTION_JOB_PAYLOAD_B64").withValue(payload).endEnv()
                                 .addNewEnv().withName("EXECUTION_BACKEND").withValue("worker-pod").endEnv()
                                 .addNewEnv().withName("SPRING_MAIN_WEB_APPLICATION_TYPE").withValue("none").endEnv()
+                                .addNewEnv().withName(RunnerClasspath.ENV_NAME).withValue(RunnerClasspath.IMAGE_LIBS_GLOB).endEnv()
                                 .withResources(resourceRequirements.build())
                             .endContainer()
                         .endSpec()

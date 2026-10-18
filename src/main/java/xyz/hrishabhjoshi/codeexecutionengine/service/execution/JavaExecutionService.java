@@ -6,6 +6,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.config.ExecutionRuntimeProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ExecutionResult;
 import xyz.hrishabhjoshi.codeexecutionengine.service.utils.ManagedProcessRunner;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -36,13 +37,7 @@ public class JavaExecutionService implements ExecutionService {
 
         List<String> command = new ArrayList<>(runtimeProperties.getRequiredLanguageRuntime("java").runCommandTokens());
         command.add("-cp");
-        // Include submission path + extra classpath (Jackson JARs - auto-resolved or from env var)
-        String classpath = submissionPath.toAbsolutePath().toString();
-        String extraCp = runtimeProperties.getResolvedExtraClasspath();
-        if (!extraCp.isEmpty()) {
-            classpath += ":" + extraCp;
-        }
-        command.add(classpath);
+        command.add(submissionPath.toAbsolutePath() + File.pathSeparator + runtimeProperties.getResolvedExtraClasspath());
         command.add(fullyQualifiedMainClass);
 
         ManagedProcessRunner.ProcessExecutionResult result = processRunner.run(

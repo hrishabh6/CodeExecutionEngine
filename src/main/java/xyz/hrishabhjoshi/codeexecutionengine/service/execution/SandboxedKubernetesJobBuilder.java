@@ -13,6 +13,7 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ComplexityProfileExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.config.KubernetesExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.config.PlaygroundSandboxProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.config.RunnerClasspath;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,6 +77,7 @@ public final class SandboxedKubernetesJobBuilder {
         if (extraEnv != null) {
             extraEnv.forEach((k, v) -> container.addNewEnv().withName(k).withValue(v).endEnv());
         }
+        addRunnerClasspathIfAbsent(container, extraEnv);
 
         JobBuilder builder = new JobBuilder()
                 .withNewMetadata()
@@ -172,6 +174,7 @@ public final class SandboxedKubernetesJobBuilder {
         if (extraEnv != null) {
             extraEnv.forEach((k, v) -> container.addNewEnv().withName(k).withValue(v).endEnv());
         }
+        addRunnerClasspathIfAbsent(container, extraEnv);
         addSandboxRedisCredentialEnvFromSecret(container, profileProperties);
 
         JobBuilder builder = new JobBuilder()
@@ -213,6 +216,16 @@ public final class SandboxedKubernetesJobBuilder {
         }
 
         return builder.build();
+    }
+
+    private static void addRunnerClasspathIfAbsent(ContainerBuilder container, Map<String, String> extraEnv) {
+        if (extraEnv != null && extraEnv.containsKey(RunnerClasspath.ENV_NAME)) {
+            return;
+        }
+        container.addNewEnv()
+                .withName(RunnerClasspath.ENV_NAME)
+                .withValue(RunnerClasspath.IMAGE_LIBS_GLOB)
+                .endEnv();
     }
 
     private static void addSandboxRedisCredentialEnvFromSecret(

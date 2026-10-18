@@ -6,6 +6,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.config.ExecutionRuntimeProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CompilationResult;
 import xyz.hrishabhjoshi.codeexecutionengine.service.utils.ManagedProcessRunner;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,13 +45,7 @@ public class JavaCompilationService implements CompilationService {
         command.add("-d");
         command.add(submissionPath.toAbsolutePath().toString());
         command.add("-cp");
-        // Include submission path + extra classpath (Jackson JARs - auto-resolved or from env var)
-        String classpath = submissionPath.toAbsolutePath().toString();
-        String extraCp = runtimeProperties.getResolvedExtraClasspath();
-        if (!extraCp.isEmpty()) {
-            classpath += ":" + extraCp;
-        }
-        command.add(classpath);
+        command.add(submissionPath.toAbsolutePath() + File.pathSeparator + runtimeProperties.getResolvedExtraClasspath());
         command.addAll(javaFiles);
 
         ManagedProcessRunner.ProcessExecutionResult result = processRunner.run(

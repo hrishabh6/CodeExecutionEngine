@@ -1,9 +1,11 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service.execution;
 
+import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import org.junit.jupiter.api.Test;
 import xyz.hrishabhjoshi.codeexecutionengine.config.KubernetesExecutionProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.config.PlaygroundSandboxProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.config.RunnerClasspath;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -38,7 +40,12 @@ class SandboxedKubernetesJobBuilderTest {
         assertTrue(container.getSecurityContext().getReadOnlyRootFilesystem());
         assertTrue(container.getSecurityContext().getRunAsNonRoot());
         assertEquals(65532L, container.getSecurityContext().getRunAsUser());
+        assertFalse(container.getSecurityContext().getAllowPrivilegeEscalation());
         assertNotNull(container.getVolumeMounts());
         assertTrue(container.getVolumeMounts().stream().anyMatch(m -> "/tmp".equals(m.getMountPath())));
+        assertTrue(container.getEnv().stream().anyMatch(env ->
+                RunnerClasspath.ENV_NAME.equals(env.getName())
+                        && RunnerClasspath.IMAGE_LIBS_GLOB.equals(env.getValue())));
+        assertTrue(container.getEnv().stream().map(EnvVar::getName).noneMatch("HOST_PATH"::equals));
     }
 }
