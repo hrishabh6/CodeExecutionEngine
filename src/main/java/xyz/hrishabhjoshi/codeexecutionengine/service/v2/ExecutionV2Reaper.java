@@ -38,6 +38,11 @@ public class ExecutionV2Reaper {
             for (String executionId : processing) {
                 String claim = stringRedisTemplate.opsForValue().get(keys.claimKey(executionId));
                 if (claim == null) {
+                    if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(keys.taskKey(executionId)))) {
+                        stringRedisTemplate.opsForList().remove(keys.processingList(), 1, executionId);
+                        stringRedisTemplate.opsForList().leftPush(keys.readyList(), executionId);
+                        log.warn("[V2] requeued orphaned processing entry executionId={}", executionId);
+                    }
                     continue;
                 }
                 String[] parts = claim.split("\\|", 4);
