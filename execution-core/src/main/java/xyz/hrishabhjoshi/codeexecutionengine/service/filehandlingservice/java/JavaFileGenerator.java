@@ -3,7 +3,6 @@ package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.java;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO.QuestionMetadata;
 import xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.FileGenerator;
-import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -11,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 @Slf4j
-@Component("javaFileGenerator")
 public class JavaFileGenerator implements FileGenerator {
 
     @Override

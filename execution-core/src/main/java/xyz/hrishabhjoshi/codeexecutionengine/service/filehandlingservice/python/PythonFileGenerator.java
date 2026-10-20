@@ -1,7 +1,5 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.python;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.FileGenerator;
 
@@ -31,14 +29,17 @@ import java.nio.file.Path;
  * @version 1.0
  * @since 1.0
  */
-@Component("pythonFileGenerator")
 public class PythonFileGenerator implements FileGenerator {
 
-    @Autowired
-    private PythonMainContentGenerator mainContentGenerator;
+    private final PythonMainContentGenerator mainContentGenerator;
+    private final PythonSolutionContentGenerator solutionContentGenerator;
 
-    @Autowired
-    private PythonSolutionContentGenerator solutionContentGenerator;
+    public PythonFileGenerator(
+            PythonMainContentGenerator mainContentGenerator,
+            PythonSolutionContentGenerator solutionContentGenerator) {
+        this.mainContentGenerator = mainContentGenerator;
+        this.solutionContentGenerator = solutionContentGenerator;
+    }
 
     /**
      * Generates all necessary Python files for code execution.

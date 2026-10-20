@@ -2,8 +2,6 @@ package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.python
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 
 import java.util.Map;
@@ -27,15 +25,16 @@ import java.util.regex.Matcher;
  * @version 1.0
  * @since 1.0
  */
-@Component
 public class PythonMainContentGenerator {
 
     private static final Pattern CUSTOM_DS_PATTERN = Pattern.compile("(ListNode|TreeNode|Node)");
 
-    @Autowired
-    private PythonInputContentGenerator inputGenerator;
-
+    private final PythonInputContentGenerator inputGenerator;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public PythonMainContentGenerator(PythonInputContentGenerator inputGenerator) {
+        this.inputGenerator = inputGenerator;
+    }
 
     /**
      * Generates the complete content for the main.py file.

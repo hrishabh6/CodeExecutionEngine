@@ -1,8 +1,5 @@
 package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.python;
 
-import org.springframework.stereotype.Component;
-
-@Component
 public class PythonCustomDSGenerator {
 
     public static String generateHelperMethod(String structureName) {

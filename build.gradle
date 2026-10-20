@@ -24,6 +24,8 @@ repositories {
 }
 
 dependencies {
+    implementation project(':execution-core')
+
     // Manages versions for implementation and other standard configurations
     implementation platform('org.springframework.boot:spring-boot-dependencies:3.5.4')
 

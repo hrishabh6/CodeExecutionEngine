@@ -2,7 +2,6 @@ package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.python
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Component;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ParamInfoDTO;
 
@@ -23,7 +22,6 @@ import java.util.regex.Matcher;
  * @version 1.0
  * @since 1.0
  */
-@Component
 public class PythonInputContentGenerator {
 
     private static final Pattern CUSTOM_DS_PATTERN = Pattern.compile("(ListNode|TreeNode|Node)");

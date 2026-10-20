@@ -1,7 +1,6 @@
 // Updated PythonSolutionContentGenerator.java
 package xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.python;
 
-import org.springframework.stereotype.Component;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 
 import java.util.Set;
@@ -9,7 +8,6 @@ import java.util.HashSet;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
-@Component
 public class PythonSolutionContentGenerator {
 
     public String generateSolutionContent(CodeSubmissionDTO submissionDto) {
