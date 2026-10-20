@@ -3,6 +3,7 @@ package xyz.hrishabhjoshi.codeexecutionengine.service.execution;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ExecutionRuntimeProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.core.pipeline.RunCommandPlanner;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ExecutionResult;
 import xyz.hrishabhjoshi.codeexecutionengine.service.utils.ManagedProcessRunner;
 
@@ -34,11 +35,11 @@ public class PythonExecutionService implements ExecutionService {
 
         logConsumer.accept("EXECUTION_SERVICE: Starting worker-pod execution for submission: " + submissionId);
 
-        String pythonFilePath = constructPythonFilePath(fullyQualifiedMainClass);
+        String pythonFilePath = RunCommandPlanner.constructPythonFilePath(fullyQualifiedMainClass);
         logConsumer.accept("EXECUTION_SERVICE: Constructed Python file path: " + pythonFilePath);
 
-        List<String> command = new ArrayList<>(runtimeProperties.getRequiredLanguageRuntime("python").runCommandTokens());
-        command.add(pythonFilePath);
+        List<String> command = RunCommandPlanner.planPythonRun(
+                runtimeProperties.toSnapshot(), fullyQualifiedMainClass);
 
         ManagedProcessRunner.ProcessExecutionResult result = processRunner.run(
                 command,
@@ -62,20 +63,6 @@ public class PythonExecutionService implements ExecutionService {
                 .timedOut(result.timedOut())
                 .exitCode(result.exitCode())
                 .build();
-    }
-
-    private String constructPythonFilePath(String fullyQualifiedMainClass) {
-        if (fullyQualifiedMainClass == null || fullyQualifiedMainClass.trim().isEmpty()) {
-            throw new IllegalArgumentException("fullyQualifiedMainClass cannot be null or empty for Python execution");
-        }
-
-        String packagePath = fullyQualifiedMainClass;
-        if (packagePath.endsWith(".Main")) {
-            packagePath = packagePath.substring(0, packagePath.length() - 5);
-        }
-
-        String filePath = packagePath.replace(".", "/");
-        return filePath + "/main.py";
     }
 
     private void parseExecutionOutputForResults(String output, List<ExecutionResult.TestCaseOutput> results, Long memoryBytes) {

@@ -1,14 +1,13 @@
 package xyz.hrishabhjoshi.codeexecutionengine;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import xyz.hrishabhjoshi.codeexecutionengine.core.generation.SourceWorkspaceGenerator;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeExecutionResultDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.CodeSubmissionDTO;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.Status;
 import xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice.CodeExecutor;
-import xyz.hrishabhjoshi.codeexecutionengine.service.factory.FileGeneratorFactory;
-import xyz.hrishabhjoshi.codeexecutionengine.service.filehandlingservice.FileGenerator;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -19,13 +18,11 @@ import java.util.stream.Stream;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CodeExecutionManager {
 
-    @Autowired
-    private CodeExecutor codeExecutor;
-
-    @Autowired
-    private FileGeneratorFactory fileGeneratorFactory;
+    private final CodeExecutor codeExecutor;
+    private final SourceWorkspaceGenerator sourceWorkspaceGenerator;
 
     public CodeExecutionResultDTO runCodeWithTestcases(CodeSubmissionDTO submissionDto, Consumer<String> logConsumer) {
         String submissionId = submissionDto.getSubmissionId() != null ? submissionDto.getSubmissionId()
@@ -50,16 +47,12 @@ public class CodeExecutionManager {
         try {
             logConsumer.accept("Generating source files...");
 
-            log.info("[EXEC_MANAGER] Getting file generator for language: {}", submissionDto.getLanguage());
-            FileGenerator fileGenerator = fileGeneratorFactory.getFileGenerator(submissionDto.getLanguage());
-
-            // Use system temp directory instead of project root to avoid leftover files
             Path systemTempDir = Paths.get(System.getProperty("java.io.tmpdir"));
             tempRootPath = Files.createTempDirectory(systemTempDir, "cxe-exec-" + executionId + "-");
             log.info("[EXEC_MANAGER] Created temp directory: {}", tempRootPath);
 
-            log.info("[EXEC_MANAGER] Calling fileGenerator.generateFiles()...");
-            fileGenerator.generateFiles(submissionDto, tempRootPath);
+            log.info("[EXEC_MANAGER] Calling sourceWorkspaceGenerator.generateIntoWorkspace()...");
+            sourceWorkspaceGenerator.generateIntoWorkspace(submissionDto, tempRootPath);
             log.info("[EXEC_MANAGER] File generation complete");
 
             logConsumer.accept("Files generated at: " + tempRootPath.toAbsolutePath());
@@ -95,15 +88,10 @@ public class CodeExecutionManager {
                     .compilationOutput("Error: " + e.getMessage())
                     .build();
         } finally {
-            // CRITICAL: Always clean up temp files
             cleanupTempDirectory(tempRootPath, logConsumer);
         }
     }
 
-    /**
-     * Recursively delete the temp directory.
-     * Logs failures but doesn't throw - cleanup should never break execution flow.
-     */
     private void cleanupTempDirectory(Path tempRootPath, Consumer<String> logConsumer) {
         if (tempRootPath == null || !Files.exists(tempRootPath)) {
             return;
@@ -119,7 +107,6 @@ public class CodeExecutionManager {
                             Files.deleteIfExists(path);
                         } catch (IOException e) {
                             log.warn("Failed to delete {}: {}", path, e.getMessage());
-                            // Try again with File.delete() as fallback
                             if (!path.toFile().delete()) {
                                 log.error("Cleanup failed for: {} - may require manual cleanup", path);
                             }

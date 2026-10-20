@@ -4,11 +4,14 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import xyz.hrishabhjoshi.codeexecutionengine.core.runtime.ExecutionRuntimeSnapshot;
+import xyz.hrishabhjoshi.codeexecutionengine.core.runtime.LanguageRuntimeSpec;
 
 import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Getter
@@ -45,6 +48,17 @@ public class ExecutionRuntimeProperties {
             throw new IllegalArgumentException("No runtime configuration found for language: " + language);
         }
         return runtime;
+    }
+
+    public ExecutionRuntimeSnapshot toSnapshot() {
+        Map<String, LanguageRuntimeSpec> mapped = languages.entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey,
+                        e -> new LanguageRuntimeSpec(e.getValue().getCompile(), e.getValue().getRun())));
+        return new ExecutionRuntimeSnapshot(
+                compilationTimeoutSeconds,
+                getResolvedExtraClasspath(),
+                mapped);
     }
 
     @Getter
