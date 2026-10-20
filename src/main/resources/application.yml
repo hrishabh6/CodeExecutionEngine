@@ -29,6 +29,17 @@ management:
 
 # Execution Service Configuration
 execution:
+  v2:
+    enabled: ${EXECUTION_V2_ENABLED:false}
+    key-prefix: ${EXECUTION_V2_KEY_PREFIX:execution:v2:}
+    task-ttl-seconds: ${EXECUTION_V2_TASK_TTL_SECONDS:3600}
+    status-ttl-seconds: ${EXECUTION_V2_STATUS_TTL_SECONDS:3600}
+    queue-capacity: ${EXECUTION_V2_QUEUE_CAPACITY:100}
+    claim-grace-seconds: ${EXECUTION_V2_CLAIM_GRACE_SECONDS:15}
+    reaper-enabled: ${EXECUTION_V2_REAPER_ENABLED:false}
+    reaper-interval-seconds: ${EXECUTION_V2_REAPER_INTERVAL_SECONDS:30}
+  routing:
+    persistent-runner-enabled: ${EXECUTION_PERSISTENT_RUNNER_ENABLED:false}
   backend: ${EXECUTION_BACKEND:worker-pod}
   mode: ${EXECUTION_MODE:worker}
   worker:

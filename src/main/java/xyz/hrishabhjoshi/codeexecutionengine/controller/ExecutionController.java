@@ -10,10 +10,14 @@ import xyz.hrishabhjoshi.codeexecutionengine.dto.*;
 import xyz.hrishabhjoshi.codeexecutionengine.logging.RequestContext;
 import xyz.hrishabhjoshi.codeexecutionengine.dto.ExecutionMode;
 import xyz.hrishabhjoshi.codeexecutionengine.execution.ExecutionPolicyResolver;
+import xyz.hrishabhjoshi.codeexecutionengine.config.ExecutionRoutingProperties;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.ExecutionQueueService;
 import xyz.hrishabhjoshi.codeexecutionengine.service.helperservice.SubmissionStatusService;
+import xyz.hrishabhjoshi.codeexecutionengine.service.v2.ExecutionBackendRouter;
+import xyz.hrishabhjoshi.codeexecutionengine.service.v2.ExecutionV2Publisher;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * REST API for code execution service.
@@ -28,6 +32,8 @@ public class ExecutionController {
         private final ExecutionQueueService queueService;
         private final SubmissionStatusService statusService;
         private final ExecutionPolicyResolver executionPolicyResolver;
+        private final ExecutionBackendRouter executionBackendRouter;
+        private final Optional<ExecutionV2Publisher> executionV2Publisher;
 
         /**
          * Submit code for execution (async).
@@ -78,7 +84,14 @@ public class ExecutionController {
                 // Enqueue for async processing
                 log.debug("[CONTROLLER] enqueueing submission={}", request.getSubmissionId());
 
-                String submissionId = queueService.enqueue(request);
+                String submissionId;
+                if (executionBackendRouter.resolve(mode) == ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL) {
+                        submissionId = executionV2Publisher
+                                .orElseThrow(() -> new IllegalStateException("execution.v2.enabled required for persistent routing"))
+                                .publish(request);
+                } else {
+                        submissionId = queueService.enqueue(request);
+                }
                 log.info("[CONTROLLER] Enqueued successfully with submissionId={} executionId={}", submissionId, request.getExecutionId());
 
                 // Get queue stats
