@@ -8,6 +8,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.core.generation.SourceWorkspaceGene
 import xyz.hrishabhjoshi.codeexecutionengine.core.pipeline.CompileCommandPlanner;
 import xyz.hrishabhjoshi.codeexecutionengine.core.pipeline.ExecutionOutputParser;
 import xyz.hrishabhjoshi.codeexecutionengine.core.pipeline.RunCommandPlanner;
+import xyz.hrishabhjoshi.codeexecutionengine.config.RunnerClasspath;
 import xyz.hrishabhjoshi.codeexecutionengine.core.runtime.ExecutionRuntimeSnapshot;
 import xyz.hrishabhjoshi.codeexecutionengine.core.runtime.LanguageRuntimeSpec;
 import xyz.hrishabhjoshi.codeexecutionengine.core.v2.V2TerminalCategory;
@@ -64,10 +65,12 @@ public final class TaskExecutionPipeline {
             return terminal(envelope, Status.COMPILATON_ERROR, V2TerminalCategory.COMPILATION_ERROR,
                     "No sources");
         }
+        List<String> compileCommand = rewriteForSandboxWorkspace(plan.command(), workspace);
         NsJailProcessLauncher.SandboxStageResult compile = sandbox.runStage(
                 workspace,
-                List.of(String.join(" ", plan.command())),
-                runtime.compilationTimeoutSeconds());
+                List.of(javaToolOptionsPrefix() + String.join(" ", compileCommand)),
+                runtime.compilationTimeoutSeconds(),
+                runtime.resolvedExtraClasspath());
         if (compile.timedOut()) {
             return terminal(envelope, Status.TIMEOUT, V2TerminalCategory.TIME_LIMIT_EXCEEDED,
                     compile.output());
@@ -77,12 +80,13 @@ public final class TaskExecutionPipeline {
                     compile.output());
         }
 
-        List<String> runCmd = RunCommandPlanner.planJavaRun(runtime, workspace, mainClass);
+        List<String> runCmd = rewriteForSandboxWorkspace(
+                RunCommandPlanner.planJavaRun(runtime, workspace, mainClass), workspace);
         NsJailProcessLauncher.SandboxStageResult run = sandbox.runStage(
                 workspace,
-                List.of("export JAVA_TOOL_OPTIONS='-Xmx256m -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m'; "
-                        + String.join(" ", runCmd)),
-                10);
+                List.of(javaToolOptionsPrefix() + String.join(" ", runCmd)),
+                10,
+                runtime.resolvedExtraClasspath());
         if (run.timedOut()) {
             return terminal(envelope, Status.TIMEOUT, V2TerminalCategory.TIME_LIMIT_EXCEEDED,
                     run.output());
@@ -109,7 +113,8 @@ public final class TaskExecutionPipeline {
             Path workspace,
             String mainClass) throws Exception {
         List<String> runCmd = RunCommandPlanner.planPythonRun(runtime, mainClass);
-        NsJailProcessLauncher.SandboxStageResult run = sandbox.runStage(workspace, List.of(String.join(" ", runCmd)), 10);
+        NsJailProcessLauncher.SandboxStageResult run = sandbox.runStage(
+                workspace, List.of(String.join(" ", runCmd)), 10, runtime.resolvedExtraClasspath());
         if (run.timedOut()) {
             return terminal(envelope, Status.TIMEOUT, V2TerminalCategory.TIME_LIMIT_EXCEEDED,
                     run.output());
@@ -149,6 +154,22 @@ public final class TaskExecutionPipeline {
                 dto);
     }
 
+    private static String javaToolOptionsPrefix() {
+        return "export JAVA_TOOL_OPTIONS='-Xmx256m -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m'; ";
+    }
+
+    private static List<String> rewriteForSandboxWorkspace(List<String> command, Path workspace) {
+        String hostRoot = workspace.toAbsolutePath().normalize().toString();
+        return command.stream()
+                .map(token -> {
+                    if (token.startsWith(hostRoot)) {
+                        return "/workspace" + token.substring(hostRoot.length()).replace('\\', '/');
+                    }
+                    return token;
+                })
+                .toList();
+    }
+
     private static List<CodeExecutionResultDTO.TestCaseOutput> mapOutputs(
             List<ExecutionResult.TestCaseOutput> outputs) {
         return outputs.stream()
@@ -169,6 +190,7 @@ public final class TaskExecutionPipeline {
                 javaHome + "/bin/javac",
                 javaHome + "/bin/java");
         LanguageRuntimeSpec python = new LanguageRuntimeSpec("", "python3");
-        return new ExecutionRuntimeSnapshot(30, "", Map.of("java", java, "python", python));
+        String extraClasspath = RunnerClasspath.resolve(System.getenv(RunnerClasspath.ENV_NAME));
+        return new ExecutionRuntimeSnapshot(30, extraClasspath, Map.of("java", java, "python", python));
     }
 }
