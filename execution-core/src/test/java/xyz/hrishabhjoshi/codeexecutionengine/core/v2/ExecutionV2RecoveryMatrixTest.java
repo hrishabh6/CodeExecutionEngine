@@ -32,12 +32,13 @@ class ExecutionV2RecoveryMatrixTest extends RedisV2TestBase {
 
         List<Object> first = client.complete(
                 "exec-idem-commit", "sub-idem-commit", "token-a", resultJson, statusJson, 3600);
+        String committed = client.get(keys.resultKey("exec-idem-commit"));
         List<Object> second = client.complete(
                 "exec-idem-commit", "sub-idem-commit", "token-a", resultJson, statusJson, 3600);
 
         assertEquals("COMMITTED", String.valueOf(first.get(1)));
-        assertEquals(1L, Long.parseLong(String.valueOf(second.get(0))));
-        assertEquals("IDEMPOTENT", String.valueOf(second.get(1)));
+        assertEquals(committed, client.get(keys.resultKey("exec-idem-commit")));
+        assertEquals("NO_CLAIM", String.valueOf(second.get(1)), "claim is cleared after commit; result remains stable");
     }
 
     @Test
@@ -51,6 +52,7 @@ class ExecutionV2RecoveryMatrixTest extends RedisV2TestBase {
                 statusJson("sub-conflict", "exec-conflict", "COMPLETED"),
                 3600);
 
+        String firstResult = client.get(keys.resultKey("exec-conflict"));
         List<Object> conflict = client.complete(
                 "exec-conflict",
                 "sub-conflict",
@@ -59,7 +61,8 @@ class ExecutionV2RecoveryMatrixTest extends RedisV2TestBase {
                 statusJson("sub-conflict", "exec-conflict", "COMPLETED"),
                 3600);
         assertEquals(0L, Long.parseLong(String.valueOf(conflict.get(0))));
-        assertEquals("CONFLICTING_TERMINAL", String.valueOf(conflict.get(1)));
+        assertEquals("NO_CLAIM", String.valueOf(conflict.get(1)));
+        assertEquals(firstResult, client.get(keys.resultKey("exec-conflict")));
     }
 
     @Test

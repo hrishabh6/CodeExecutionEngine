@@ -20,6 +20,11 @@ public abstract class RedisV2TestBase {
 
     @BeforeAll
     static void startRedisContainer() {
+        String externalUri = System.getenv("CXE_V2_TEST_REDIS_URI");
+        if (externalUri != null && !externalUri.isBlank()) {
+            redisUri = externalUri.trim();
+            return;
+        }
         Assumptions.assumeTrue(
                 DockerTestSupport.isDockerAvailable(),
                 "Docker unavailable — skipping Redis v2 integration tests");
@@ -33,6 +38,7 @@ public abstract class RedisV2TestBase {
     static void stopRedisContainer() {
         if (redis != null) {
             redis.stop();
+            redis = null;
         }
     }
 
@@ -45,5 +51,20 @@ public abstract class RedisV2TestBase {
     protected static String statusJson(String submissionId, String executionId, String status) {
         return "{\"submissionId\":\"" + submissionId + "\",\"executionId\":\"" + executionId + "\",\"status\":\""
                 + status + "\"}";
+    }
+
+    protected static String redisHost() {
+        if (redis != null) {
+            return redis.getHost();
+        }
+        return redisUri.replace("redis://", "").split(":")[0];
+    }
+
+    protected static int redisPort() {
+        if (redis != null) {
+            return redis.getMappedPort(6379);
+        }
+        String[] hostPort = redisUri.replace("redis://", "").split(":");
+        return Integer.parseInt(hostPort[hostPort.length - 1]);
     }
 }
