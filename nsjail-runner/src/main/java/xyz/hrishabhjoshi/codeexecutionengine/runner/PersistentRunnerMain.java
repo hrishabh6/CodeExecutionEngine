@@ -5,7 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import xyz.hrishabhjoshi.codeexecutionengine.core.contract.RunnerTaskEnvelope;
 import xyz.hrishabhjoshi.codeexecutionengine.core.contract.RunnerTerminalResult;
+import xyz.hrishabhjoshi.codeexecutionengine.core.mapping.RunnerSubmissionStatusMapper;
 import xyz.hrishabhjoshi.codeexecutionengine.core.v2.V2ClaimRecord;
+import xyz.hrishabhjoshi.codeexecutionengine.dto.SubmissionStatusDto;
 import xyz.hrishabhjoshi.codeexecutionengine.runner.redis.RedisV2RunnerClient;
 import xyz.hrishabhjoshi.codeexecutionengine.runner.sandbox.NsJailProcessLauncher;
 import xyz.hrishabhjoshi.codeexecutionengine.runner.workspace.WorkspaceManager;
@@ -45,8 +47,13 @@ public final class PersistentRunnerMain {
                 }
                 RunnerTaskEnvelope envelope = mapper.readValue(taskJson, RunnerTaskEnvelope.class);
                 String attemptToken = UUID.randomUUID().toString();
-                String processingStatus = "{\"submissionId\":\"" + envelope.submissionId() + "\",\"executionId\":\""
-                        + executionId + "\",\"status\":\"PROCESSING\"}";
+                String processingStatus = mapper.writeValueAsString(SubmissionStatusDto.builder()
+                        .submissionId(envelope.submissionId())
+                        .executionId(executionId)
+                        .status("PROCESSING")
+                        .startedAt(System.currentTimeMillis())
+                        .workerId(config.runnerId())
+                        .build());
                 if (!redis.finalizeClaim(
                         executionId,
                         envelope.submissionId(),
@@ -69,7 +76,8 @@ public final class PersistentRunnerMain {
                     RunnerTerminalResult terminal = pipeline.execute(envelope, workspace);
                     RunnerCrashTestHooks.syncpoint("AFTER_EXECUTE_BEFORE_COMPLETE");
                     String resultJson = mapper.writeValueAsString(terminal);
-                    String statusJson = mapper.writeValueAsString(terminal.result());
+                    String statusJson = mapper.writeValueAsString(RunnerSubmissionStatusMapper.terminal(
+                            terminal.result(), config.runnerId(), System.currentTimeMillis()));
                     RedisV2RunnerClient.CommitResult commit = redis.complete(
                             executionId,
                             envelope.submissionId(),

@@ -24,6 +24,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -44,6 +45,7 @@ public class ExecutionV2Publisher {
     }
 
     public String publish(ExecutionRequest request) {
+        ensureIdentifiers(request);
         ExecutionV2Keys keys = v2Properties.toKeys();
         try {
             String payloadBase64 = payloadCodec.encode(ExecutionRequestMapper.toSubmission(request));
@@ -101,6 +103,15 @@ public class ExecutionV2Publisher {
             return request.getSubmissionId();
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize v2 task", e);
+        }
+    }
+
+    static void ensureIdentifiers(ExecutionRequest request) {
+        if (request.getSubmissionId() == null || request.getSubmissionId().isBlank()) {
+            request.setSubmissionId(UUID.randomUUID().toString());
+        }
+        if (request.getExecutionId() == null || request.getExecutionId().isBlank()) {
+            request.setExecutionId(UUID.randomUUID().toString());
         }
     }
 
