@@ -37,23 +37,37 @@ public final class PersistentRunnerMain {
                     continue;
                 }
                 String executionId = claimedId.get();
+                RunnerCrashTestHooks.syncpoint("AFTER_POP_TO_PROCESSING");
+                String taskJson = redis.getTaskJson(executionId);
+                if (taskJson == null || taskJson.isBlank()) {
+                    log.warn("Missing task payload for {}", executionId);
+                    continue;
+                }
+                RunnerTaskEnvelope envelope = mapper.readValue(taskJson, RunnerTaskEnvelope.class);
                 String attemptToken = UUID.randomUUID().toString();
-                String processingStatus = "{\"submissionId\":\"pending\",\"executionId\":\"" + executionId
-                        + "\",\"status\":\"PROCESSING\"}";
-                if (!redis.finalizeClaim(executionId, config.runnerId(), attemptToken, 1L, processingStatus,
+                String processingStatus = "{\"submissionId\":\"" + envelope.submissionId() + "\",\"executionId\":\""
+                        + executionId + "\",\"status\":\"PROCESSING\"}";
+                if (!redis.finalizeClaim(
+                        executionId,
+                        envelope.submissionId(),
+                        config.runnerId(),
+                        attemptToken,
+                        1L,
+                        processingStatus,
                         config.leaseDuration().getSeconds())) {
                     log.warn("Claim finalize failed for {}", executionId);
                     continue;
                 }
                 V2ClaimRecord claim = new V2ClaimRecord(config.runnerId(), attemptToken, 1L,
                         java.time.Instant.now().getEpochSecond() + config.leaseDuration().getSeconds());
+                RunnerCrashTestHooks.syncpoint("AFTER_CLAIM_FINALIZE");
                 Path workspace = null;
+                boolean taskHandled = false;
                 try {
-                    String taskJson = redis.getTaskJson(executionId);
-                    RunnerTaskEnvelope envelope = mapper.readValue(taskJson, RunnerTaskEnvelope.class);
                     workspace = workspaces.createTaskWorkspace();
                     redis.heartbeat(executionId, claim, config.leaseDuration().getSeconds());
                     RunnerTerminalResult terminal = pipeline.execute(envelope, workspace);
+                    RunnerCrashTestHooks.syncpoint("AFTER_EXECUTE_BEFORE_COMPLETE");
                     String resultJson = mapper.writeValueAsString(terminal);
                     String statusJson = mapper.writeValueAsString(terminal.result());
                     RedisV2RunnerClient.CommitResult commit = redis.complete(
@@ -66,8 +80,12 @@ public final class PersistentRunnerMain {
                     if (commit == RedisV2RunnerClient.CommitResult.STALE) {
                         log.warn("Stale commit ignored for {}", executionId);
                     }
+                    taskHandled = true;
                 } finally {
                     workspaces.deleteOrQuarantine(workspace);
+                }
+                if (RunnerCrashTestHooks.singleTaskMode() && taskHandled) {
+                    running.set(false);
                 }
             }
         }

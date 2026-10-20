@@ -43,6 +43,7 @@ public final class RedisV2RunnerClient implements AutoCloseable {
 
     public boolean finalizeClaim(
             String executionId,
+            String submissionId,
             String runnerId,
             String attemptToken,
             long attemptGeneration,
@@ -55,7 +56,7 @@ public final class RedisV2RunnerClient implements AutoCloseable {
                 new String[] {
                         keys.taskKey(executionId),
                         keys.claimKey(executionId),
-                        keys.statusKey(extractSubmissionId(processingStatusJson)),
+                        keys.statusKey(submissionId),
                         keys.queuedZset()
                 },
                 executionId,
