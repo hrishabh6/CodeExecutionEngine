@@ -1,0 +1,14 @@
+package xyz.hrishabhjoshi.codeexecutionengine.core.v2;
+
+public enum V2TerminalCategory {
+    SUCCESS,
+    COMPILATION_ERROR,
+    RUNTIME_ERROR,
+    TIME_LIMIT_EXCEEDED,
+    OUTPUT_LIMIT_EXCEEDED,
+    SANDBOX_POLICY_VIOLATION,
+    CANCELLED,
+    CONTRACT_UNSUPPORTED,
+    INFRASTRUCTURE_ERROR,
+    RETRYABLE_INFRASTRUCTURE
+}
