@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algocrack.local/schemas/cxe/runner-task-envelope.v2.json",
+  "title": "RunnerTaskEnvelope",
+  "type": "object",
+  "required": ["contractVersion", "taskId", "attemptId", "payloadBase64"],
+  "properties": {
+    "contractVersion": { "type": "string", "const": "cxe.runner.v2" },
+    "taskId": { "type": "string", "minLength": 1 },
+    "attemptId": { "type": "string", "minLength": 1 },
+    "submissionId": { "type": "string" },
+    "executionId": { "type": "string" },
+    "mode": { "type": "string" },
+    "language": { "type": "string" },
+    "payloadBase64": { "type": "string", "minLength": 1 },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "limitsProfileId": { "type": "string" }
+  },
+  "additionalProperties": true
+}
