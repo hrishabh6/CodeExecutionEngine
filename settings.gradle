@@ -1,3 +1,4 @@
 rootProject.name = 'CodeExecutionEngine'
 
 include 'execution-core'
+include 'nsjail-runner'
