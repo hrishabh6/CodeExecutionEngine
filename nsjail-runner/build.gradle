@@ -38,3 +38,18 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+tasks.register('copyHarnessLibs', Copy) {
+    dependsOn configurations.runtimeClasspath
+    from(configurations.runtimeClasspath) {
+        include 'jackson-annotations-*.jar'
+        include 'jackson-core-*.jar'
+        include 'jackson-databind-*.jar'
+    }
+    into layout.buildDirectory.dir('install/nsjail-runner/lib')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named('installDist') {
+    dependsOn tasks.named('copyHarnessLibs')
+}
