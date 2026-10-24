@@ -5,6 +5,7 @@ COPY gradlew gradlew.bat build.gradle settings.gradle ./
 COPY gradle ./gradle
 RUN chmod +x gradlew
 
+COPY execution-core ./execution-core
 COPY src ./src
 # bootJar nests dependencies inside the executable archive. javac cannot use
 # those nested jars, so runner-libs is a normal directory of Jackson jars.
