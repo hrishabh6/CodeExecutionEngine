@@ -1,6 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.runner.redis;
 
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisNoScriptException;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import xyz.hrishabhjoshi.codeexecutionengine.core.v2.ExecutionV2Keys;
@@ -17,18 +18,21 @@ public final class RedisV2RunnerClient implements AutoCloseable {
     private final StatefulRedisConnection<String, String> connection;
     private final RedisCommands<String, String> sync;
     private final ExecutionV2Keys keys;
-    private final String claimScript;
-    private final String heartbeatScript;
-    private final String completeScript;
+    private final String claimScriptSource = LuaScriptLoader.claimFinalizeScript();
+    private final String heartbeatScriptSource = LuaScriptLoader.heartbeatScript();
+    private final String completeScriptSource = LuaScriptLoader.completeScript();
+    private String claimScript;
+    private String heartbeatScript;
+    private String completeScript;
 
     public RedisV2RunnerClient(String redisUri, ExecutionV2Keys keys) {
         this.client = RedisClient.create(redisUri);
         this.connection = client.connect();
         this.sync = connection.sync();
         this.keys = keys;
-        this.claimScript = sync.scriptLoad(LuaScriptLoader.claimFinalizeScript());
-        this.heartbeatScript = sync.scriptLoad(LuaScriptLoader.heartbeatScript());
-        this.completeScript = sync.scriptLoad(LuaScriptLoader.completeScript());
+        this.claimScript = sync.scriptLoad(claimScriptSource);
+        this.heartbeatScript = sync.scriptLoad(heartbeatScriptSource);
+        this.completeScript = sync.scriptLoad(completeScriptSource);
     }
 
     public Optional<String> blockClaimReady(long timeoutSeconds) {
@@ -50,9 +54,7 @@ public final class RedisV2RunnerClient implements AutoCloseable {
             String processingStatusJson,
             long ttlSeconds) {
         long leaseExpiry = Instant.now().getEpochSecond() + ttlSeconds;
-        List<Object> result = sync.evalsha(
-                claimScript,
-                io.lettuce.core.ScriptOutputType.MULTI,
+        List<Object> result = evalClaim(
                 new String[] {
                         keys.taskKey(executionId),
                         keys.claimKey(executionId),
@@ -71,9 +73,7 @@ public final class RedisV2RunnerClient implements AutoCloseable {
 
     public boolean heartbeat(String executionId, V2ClaimRecord claim, long ttlSeconds) {
         long leaseExpiry = Instant.now().getEpochSecond() + ttlSeconds;
-        List<Object> result = sync.evalsha(
-                heartbeatScript,
-                io.lettuce.core.ScriptOutputType.MULTI,
+        List<Object> result = evalHeartbeat(
                 new String[] {keys.claimKey(executionId)},
                 claim.runnerId(),
                 claim.attemptToken(),
@@ -93,9 +93,7 @@ public final class RedisV2RunnerClient implements AutoCloseable {
             String resultJson,
             String statusJson,
             long ttlSeconds) {
-        List<Object> result = sync.evalsha(
-                completeScript,
-                io.lettuce.core.ScriptOutputType.MULTI,
+        List<Object> result = evalComplete(
                 new String[] {
                         keys.taskKey(executionId),
                         keys.claimKey(executionId),
@@ -125,6 +123,33 @@ public final class RedisV2RunnerClient implements AutoCloseable {
 
     public void publishHeartbeat(String runnerId, String payload, long ttlSeconds) {
         sync.setex(keys.runnerHeartbeatKey(runnerId), ttlSeconds, payload);
+    }
+
+    private List<Object> evalClaim(String[] keys, String... values) {
+        try {
+            return sync.evalsha(claimScript, io.lettuce.core.ScriptOutputType.MULTI, keys, values);
+        } catch (RedisNoScriptException missing) {
+            claimScript = sync.scriptLoad(claimScriptSource);
+            return sync.evalsha(claimScript, io.lettuce.core.ScriptOutputType.MULTI, keys, values);
+        }
+    }
+
+    private List<Object> evalHeartbeat(String[] keys, String... values) {
+        try {
+            return sync.evalsha(heartbeatScript, io.lettuce.core.ScriptOutputType.MULTI, keys, values);
+        } catch (RedisNoScriptException missing) {
+            heartbeatScript = sync.scriptLoad(heartbeatScriptSource);
+            return sync.evalsha(heartbeatScript, io.lettuce.core.ScriptOutputType.MULTI, keys, values);
+        }
+    }
+
+    private List<Object> evalComplete(String[] keys, String... values) {
+        try {
+            return sync.evalsha(completeScript, io.lettuce.core.ScriptOutputType.MULTI, keys, values);
+        } catch (RedisNoScriptException missing) {
+            completeScript = sync.scriptLoad(completeScriptSource);
+            return sync.evalsha(completeScript, io.lettuce.core.ScriptOutputType.MULTI, keys, values);
+        }
     }
 
     private static String extractSubmissionId(String statusJson) {
