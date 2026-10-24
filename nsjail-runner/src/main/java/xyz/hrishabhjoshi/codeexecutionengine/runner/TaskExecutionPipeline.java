@@ -154,8 +154,9 @@ public final class TaskExecutionPipeline {
                 dto);
     }
 
-    private static String javaToolOptionsPrefix() {
-        return "export JAVA_TOOL_OPTIONS='-Xmx256m -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m'; ";
+    static String javaToolOptionsPrefix() {
+        return "export JAVA_TOOL_OPTIONS='-Xmx256m -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m "
+                + "-XX:ReservedCodeCacheSize=32m -XX:ActiveProcessorCount=2'; ";
     }
 
     private static List<String> rewriteForSandboxWorkspace(List<String> command, Path workspace) {
