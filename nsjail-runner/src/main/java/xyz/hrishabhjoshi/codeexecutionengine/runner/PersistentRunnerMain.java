@@ -14,6 +14,10 @@ import xyz.hrishabhjoshi.codeexecutionengine.runner.workspace.WorkspaceManager;
 
 import java.nio.file.Path;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class PersistentRunnerMain {
@@ -25,7 +29,9 @@ public final class PersistentRunnerMain {
         AtomicBoolean running = new AtomicBoolean(true);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> running.set(false)));
 
-        try (RedisV2RunnerClient redis = new RedisV2RunnerClient(config.redisUri(), config.keys())) {
+        try (RedisV2RunnerClient redis = new RedisV2RunnerClient(config.redisUri(), config.keys());
+             ScheduledExecutorService leaseHeartbeats = Executors.newSingleThreadScheduledExecutor(
+                     Thread.ofPlatform().daemon().name("runner-lease-heartbeat").factory())) {
             WorkspaceManager workspaces = new WorkspaceManager(config.workspaceRoot(), config.quarantineRoot());
             NsJailProcessLauncher sandbox = new NsJailProcessLauncher(config.nsjailBinary(), config.maxOutputBytes());
             TaskExecutionPipeline pipeline = new TaskExecutionPipeline(sandbox, TaskExecutionPipeline.defaultRuntimeSnapshot());
@@ -70,6 +76,11 @@ public final class PersistentRunnerMain {
                 RunnerCrashTestHooks.syncpoint("AFTER_CLAIM_FINALIZE");
                 Path workspace = null;
                 boolean taskHandled = false;
+                ScheduledFuture<?> leaseHeartbeat = leaseHeartbeats.scheduleAtFixedRate(
+                        () -> renewLease(redis, executionId, claim, config),
+                        config.heartbeatInterval().toSeconds(),
+                        config.heartbeatInterval().toSeconds(),
+                        TimeUnit.SECONDS);
                 try {
                     workspace = workspaces.createTaskWorkspace();
                     redis.heartbeat(executionId, claim, config.leaseDuration().getSeconds());
@@ -90,12 +101,27 @@ public final class PersistentRunnerMain {
                     }
                     taskHandled = true;
                 } finally {
+                    leaseHeartbeat.cancel(false);
                     workspaces.deleteOrQuarantine(workspace);
                 }
                 if (RunnerCrashTestHooks.singleTaskMode() && taskHandled) {
                     running.set(false);
                 }
             }
+        }
+    }
+
+    private static void renewLease(
+            RedisV2RunnerClient redis,
+            String executionId,
+            V2ClaimRecord claim,
+            RunnerConfig config) {
+        try {
+            if (!redis.heartbeat(executionId, claim, config.leaseDuration().getSeconds())) {
+                log.warn("Lease heartbeat rejected for {}; eventual result will be treated as stale", executionId);
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Lease heartbeat failed for {}; runner will retry while the task remains active", executionId);
         }
     }
 }
