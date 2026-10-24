@@ -1,0 +1,42 @@
+# Packaged runner image: requires host-built installDist and Phase 1 nsjail binary.
+# Build: scripts/cxe/build-runner-image.sh (runs Gradle on host first)
+
+FROM eclipse-temurin:21-jdk-jammy
+
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+ARG NSJAIL_VERSION=3.6
+
+LABEL org.opencontainers.image.title="cxe-nsjail-runner" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      xyz.hrishabhjoshi.cxe.nsjail.version="${NSJAIL_VERSION}"
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        python3 libnl-route-3-200 libprotobuf23 procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 runner \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin runner \
+    && mkdir -p /workspace /quarantine /opt/cxe-runner/lib /usr/local/lib/nsjail \
+    && chown -R runner:runner /workspace /quarantine
+
+COPY CodeExecutionEngine/nsjail-runner/build/install/nsjail-runner /opt/cxe-runner
+COPY CodeExecutionEngine/docker/runner-entrypoint.sh CodeExecutionEngine/docker/runner-probe.sh /usr/local/bin/
+
+# Phase 1 native-built NsJail (paths relative to repo root build context)
+COPY scripts/.local/bin/nsjail /usr/local/bin/nsjail
+COPY scripts/.local/lib/ /usr/local/lib/nsjail/
+
+RUN chmod 0555 /usr/local/bin/nsjail /usr/local/bin/runner-entrypoint.sh /usr/local/bin/runner-probe.sh \
+    && chown -R runner:runner /opt/cxe-runner
+
+ENV CXE_NSJAIL_BIN=/usr/local/bin/nsjail \
+    LD_LIBRARY_PATH=/usr/local/lib/nsjail \
+    CXE_RUNNER_WORKSPACE_ROOT=/workspace \
+    CXE_RUNNER_QUARANTINE_ROOT=/quarantine \
+    EXECUTION_EXTRA_CLASSPATH=/opt/cxe-runner/lib/*
+
+USER 10001:10001
+WORKDIR /opt/cxe-runner
+ENTRYPOINT ["/usr/local/bin/runner-entrypoint.sh"]

@@ -9,7 +9,6 @@ case "${mode}" in
   startup)
     test -x /opt/cxe-runner/bin/nsjail-runner
     test -x "${nsjail}"
-    "${nsjail}" --version >/dev/null 2>&1
     java -version >/dev/null 2>&1
     python3 --version >/dev/null 2>&1
     ;;
