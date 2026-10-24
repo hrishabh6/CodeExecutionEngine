@@ -95,8 +95,10 @@ public class ExecutionPolicyResolver {
             throw new ExecutionRequestRejectedException("INVALID_LANGUAGE", "language is required");
         }
         String language = request.getLanguage().trim().toUpperCase(Locale.ROOT);
-        if (!language.equals("JAVA") && !language.equals("PYTHON")) {
-            throw new ExecutionRequestRejectedException("INVALID_LANGUAGE", "Unsupported language");
+        if (!"JAVA".equals(language)) {
+            throw new ExecutionRequestRejectedException(
+                    "INVALID_LANGUAGE",
+                    "Playground execution supports Java only");
         }
         enforceUtf8Limit(request.getCode(), playgroundProperties.getMaxSourceBytes(), "SOURCE_TOO_LARGE");
         enforceUtf8Limit(

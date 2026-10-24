@@ -67,6 +67,21 @@ class ExecutionPolicyResolverTest {
     }
 
     @Test
+    void playgroundRejectsPythonBeforeExecution() {
+        properties.setEnabled(true);
+        sandboxProperties.setBackend("local-process");
+        ExecutionRequest request = ExecutionRequest.builder()
+                .language("PYTHON")
+                .code("print(1)")
+                .stdin("")
+                .build();
+        ExecutionRequestRejectedException ex = assertThrows(
+                ExecutionRequestRejectedException.class,
+                () -> resolver.validateIngress(ExecutionMode.PLAYGROUND, request));
+        assertEquals("INVALID_LANGUAGE", ex.getCode());
+    }
+
+    @Test
     void playgroundKubernetesRequiresConfiguredSandbox() {
         properties.setEnabled(true);
         sandboxProperties.setBackend("kubernetes-job");
