@@ -14,6 +14,17 @@ public class ExecutionBackendRouter {
     private final ExecutionRoutingProperties routingProperties;
 
     public ExecutionRoutingProperties.Backend resolve(ExecutionMode mode) {
+        return resolve(mode, null);
+    }
+
+    /**
+     * Playground NsJail is Java-only. Python and any other playground language stay on
+     * the Kubernetes Job backend even when the playground mode backend is persistent.
+     */
+    public ExecutionRoutingProperties.Backend resolve(ExecutionMode mode, String language) {
+        if (mode == ExecutionMode.PLAYGROUND && !isJava(language)) {
+            return ExecutionRoutingProperties.Backend.KUBERNETES_JOB;
+        }
         if ((mode == ExecutionMode.SUBMISSION || mode == ExecutionMode.PLAYGROUND)
                 && v2Properties.isEnabled()
                 && routingProperties.isPersistentRunnerEnabled()
@@ -21,5 +32,9 @@ public class ExecutionBackendRouter {
             return ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL;
         }
         return routingProperties.backendFor(mode);
+    }
+
+    private static boolean isJava(String language) {
+        return language != null && "java".equalsIgnoreCase(language.trim());
     }
 }

@@ -19,11 +19,18 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Runs a playground snippet inside NsJail. No question metadata and no oracle.
- * Java and Python match the existing local playground executor. Other languages
- * stay on the Kubernetes Job path until a sandbox command exists for them.
+ * Runs a Java playground snippet inside NsJail. No question metadata and no oracle.
+ * Python and other languages are not executed here; CXE keeps them on Kubernetes Jobs.
  */
 public final class PlaygroundNsJailExecutor {
+
+    /** Matches execution.playground.execution-timeout-seconds default. */
+    static final long RUN_TIMEOUT_SECONDS = 5;
+
+    /** Same limits as the submission runner, passed on the command so they do not land in stderr. */
+    private static final String JAVA_RUNTIME_FLAGS =
+            "-Xmx256m -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m "
+                    + "-XX:ReservedCodeCacheSize=32m -XX:ActiveProcessorCount=2";
 
     private final ObjectMapper objectMapper;
     private final NsJailProcessLauncher sandbox;
@@ -46,13 +53,12 @@ public final class PlaygroundNsJailExecutor {
             String source = payload.sourceCode() == null ? "" : payload.sourceCode();
             String stdin = payload.stdin() == null ? "" : payload.stdin();
             Files.writeString(workspace.resolve("stdin.txt"), stdin, StandardCharsets.UTF_8);
-            long timeout = Math.max(1, runtime.compilationTimeoutSeconds());
-            return switch (language) {
-                case "java" -> runJava(envelope, workspace, source, timeout);
-                case "python" -> runPython(envelope, workspace, source, timeout);
-                default -> terminal(envelope, Status.UNKNOWN, V2TerminalCategory.CONTRACT_UNSUPPORTED,
-                        "Unsupported playground language", "", "", 1, 0, false);
-            };
+            long compileTimeout = Math.max(1, runtime.compilationTimeoutSeconds());
+            if ("java".equals(language)) {
+                return runJava(envelope, workspace, source, compileTimeout);
+            }
+            return terminal(envelope, Status.UNKNOWN, V2TerminalCategory.CONTRACT_UNSUPPORTED,
+                    "Playground NsJail accepts Java only", "", "", 1, 0, false);
         } catch (Exception e) {
             return terminal(envelope, Status.INTERNAL_ERROR, V2TerminalCategory.INFRASTRUCTURE_ERROR,
                     e.getMessage(), "", "", 1, 0, false);
@@ -80,41 +86,41 @@ public final class PlaygroundNsJailExecutor {
         long started = System.currentTimeMillis();
         SandboxStageResult run = sandbox.runStage(
                 workspace,
-                List.of(TaskExecutionPipeline.javaToolOptionsPrefix()
-                        + java + " -cp /workspace Main < /workspace/stdin.txt"),
-                timeout,
+                List.of(java + " " + JAVA_RUNTIME_FLAGS
+                        + " -cp /workspace Main < /workspace/stdin.txt"
+                        + " > /workspace/stdout.txt 2> /workspace/stderr.txt"),
+                RUN_TIMEOUT_SECONDS,
                 "");
-        return mapRun(envelope, compile.output(), run, System.currentTimeMillis() - started);
+        String stdout = readText(workspace.resolve("stdout.txt"));
+        String stderr = readText(workspace.resolve("stderr.txt"));
+        return mapRun(envelope, compile.output(), run, stdout, stderr, System.currentTimeMillis() - started);
     }
 
-    private RunnerTerminalResult runPython(RunnerTaskEnvelope envelope, Path workspace, String source, long timeout)
-            throws Exception {
-        Files.writeString(workspace.resolve("main.py"), source, StandardCharsets.UTF_8);
-        String python = runtime.requireLanguage("python").runCommand();
-        long started = System.currentTimeMillis();
-        SandboxStageResult run = sandbox.runStage(
-                workspace,
-                List.of(python + " /workspace/main.py < /workspace/stdin.txt"),
-                timeout,
-                "");
-        return mapRun(envelope, "", run, System.currentTimeMillis() - started);
+    private static String readText(Path path) {
+        try {
+            return Files.exists(path) ? Files.readString(path) : "";
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private RunnerTerminalResult mapRun(
             RunnerTaskEnvelope envelope,
             String compilerOutput,
             SandboxStageResult run,
+            String stdout,
+            String stderr,
             long runtimeMs) {
         if (run.timedOut()) {
             return terminal(envelope, Status.TIMEOUT, V2TerminalCategory.TIME_LIMIT_EXCEEDED,
-                    compilerOutput, run.output(), "", 124, runtimeMs, run.truncated());
+                    compilerOutput, stdout, stderr, 124, runtimeMs, run.truncated());
         }
         if (run.exitCode() != 0) {
             return terminal(envelope, Status.RUNTIME_ERROR, V2TerminalCategory.RUNTIME_ERROR,
-                    compilerOutput, "", run.output(), run.exitCode(), runtimeMs, run.truncated());
+                    compilerOutput, stdout, stderr, run.exitCode(), runtimeMs, run.truncated());
         }
         return terminal(envelope, Status.SUCCESS, V2TerminalCategory.SUCCESS,
-                compilerOutput, run.output(), "", run.exitCode(), runtimeMs, run.truncated());
+                compilerOutput, stdout, stderr, run.exitCode(), runtimeMs, run.truncated());
     }
 
     private static RunnerTerminalResult terminal(

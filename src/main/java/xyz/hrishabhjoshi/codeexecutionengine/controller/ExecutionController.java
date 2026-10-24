@@ -85,7 +85,8 @@ public class ExecutionController {
                 log.debug("[CONTROLLER] enqueueing submission={}", request.getSubmissionId());
 
                 String submissionId;
-                if (executionBackendRouter.resolve(mode) == ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL) {
+                if (executionBackendRouter.resolve(mode, request.getLanguage())
+                        == ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL) {
                         submissionId = executionV2Publisher
                                 .orElseThrow(() -> new IllegalStateException("execution.v2.enabled required for persistent routing"))
                                 .publish(request);

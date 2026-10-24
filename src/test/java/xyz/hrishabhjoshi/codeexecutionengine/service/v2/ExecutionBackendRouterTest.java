@@ -41,6 +41,12 @@ class ExecutionBackendRouterTest {
         routing.getModeBackends().put(ExecutionMode.PLAYGROUND, ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL);
         ExecutionBackendRouter router = new ExecutionBackendRouter(v2, routing);
         assertEquals(ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL,
+                router.resolve(ExecutionMode.PLAYGROUND, "java"));
+        assertEquals(ExecutionRoutingProperties.Backend.KUBERNETES_JOB,
+                router.resolve(ExecutionMode.PLAYGROUND, "python"));
+        assertEquals(ExecutionRoutingProperties.Backend.KUBERNETES_JOB,
+                router.resolve(ExecutionMode.PLAYGROUND, "PYTHON"));
+        assertEquals(ExecutionRoutingProperties.Backend.KUBERNETES_JOB,
                 router.resolve(ExecutionMode.PLAYGROUND));
     }
 }
