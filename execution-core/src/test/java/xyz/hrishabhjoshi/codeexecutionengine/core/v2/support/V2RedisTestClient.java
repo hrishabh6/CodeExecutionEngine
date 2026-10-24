@@ -1,6 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.core.v2.support;
 
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.LMoveArgs;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
@@ -68,13 +69,25 @@ public final class V2RedisTestClient implements AutoCloseable {
     }
 
     public Optional<String> popReadyToProcessing(long timeoutSeconds) {
-        var popped = sync.brpop(timeoutSeconds, keys.readyList());
-        if (popped == null || !popped.hasValue() || popped.getValue() == null || popped.getValue().isBlank()) {
+        String executionId = sync.blmove(
+                keys.readyList(), keys.processingList(), LMoveArgs.Builder.rightLeft(), timeoutSeconds);
+        if (executionId == null || executionId.isBlank()) {
             return Optional.empty();
         }
-        String executionId = popped.getValue();
-        sync.lpush(keys.processingList(), executionId);
         return Optional.of(executionId);
+    }
+
+    public Optional<String> moveReadyToProcessing() {
+        return Optional.ofNullable(sync.lmove(
+                keys.readyList(), keys.processingList(), LMoveArgs.Builder.rightLeft()));
+    }
+
+    public List<String> readyEntries() {
+        return sync.lrange(keys.readyList(), 0, -1);
+    }
+
+    public List<String> processingEntries() {
+        return sync.lrange(keys.processingList(), 0, -1);
     }
 
     public List<Object> finalizeClaim(

@@ -1,6 +1,7 @@
 package xyz.hrishabhjoshi.codeexecutionengine.runner.redis;
 
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.LMoveArgs;
 import io.lettuce.core.RedisNoScriptException;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
@@ -36,12 +37,11 @@ public final class RedisV2RunnerClient implements AutoCloseable {
     }
 
     public Optional<String> blockClaimReady(long timeoutSeconds) {
-        io.lettuce.core.KeyValue<String, String> popped = sync.brpop(timeoutSeconds, keys.readyList());
-        if (popped == null || popped.hasValue() == false || popped.getValue() == null || popped.getValue().isBlank()) {
+        String executionId = sync.blmove(
+                keys.readyList(), keys.processingList(), LMoveArgs.Builder.rightLeft(), timeoutSeconds);
+        if (executionId == null || executionId.isBlank()) {
             return Optional.empty();
         }
-        String executionId = popped.getValue();
-        sync.lpush(keys.processingList(), executionId);
         return Optional.of(executionId);
     }
 
