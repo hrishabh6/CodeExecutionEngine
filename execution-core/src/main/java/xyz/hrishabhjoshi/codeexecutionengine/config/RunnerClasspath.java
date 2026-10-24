@@ -32,12 +32,12 @@ public final class RunnerClasspath {
     static String resolve(String configuredExtraClasspath, String imageLibsGlob, String systemClasspath) {
         String configured = expand(configuredExtraClasspath);
         if (containsRequiredJars(configured)) {
-            return configured;
+            return jacksonEntries(configured);
         }
 
         String imageLibs = expand(imageLibsGlob);
         if (containsRequiredJars(imageLibs)) {
-            return imageLibs;
+            return jacksonEntries(imageLibs);
         }
 
         String jvmJackson = jacksonEntries(systemClasspath);
