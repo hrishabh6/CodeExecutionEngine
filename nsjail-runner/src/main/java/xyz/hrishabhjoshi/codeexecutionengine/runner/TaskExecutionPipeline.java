@@ -36,6 +36,9 @@ public final class TaskExecutionPipeline {
     }
 
     public RunnerTerminalResult execute(RunnerTaskEnvelope envelope, Path workspace) {
+        if (envelope.mode() != null && "PLAYGROUND".equalsIgnoreCase(envelope.mode())) {
+            return new PlaygroundNsJailExecutor(objectMapper, sandbox, runtime).execute(envelope, workspace);
+        }
         try {
             CodeSubmissionDTO submission = payloadCodec.decode(envelope.payloadBase64());
             sourceGenerator.generateIntoWorkspace(submission, workspace);

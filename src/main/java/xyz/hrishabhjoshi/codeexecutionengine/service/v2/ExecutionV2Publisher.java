@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import xyz.hrishabhjoshi.codeexecutionengine.config.ExecutionV2Properties;
 import xyz.hrishabhjoshi.codeexecutionengine.core.contract.ExecutionContractVersion;
+import xyz.hrishabhjoshi.codeexecutionengine.core.contract.PlaygroundTaskPayload;
 import xyz.hrishabhjoshi.codeexecutionengine.core.mapping.ExecutionRequestMapper;
 import xyz.hrishabhjoshi.codeexecutionengine.core.contract.RunnerTaskEnvelope;
 import xyz.hrishabhjoshi.codeexecutionengine.core.v2.ExecutionV2Keys;
@@ -20,6 +21,7 @@ import xyz.hrishabhjoshi.codeexecutionengine.execution.ExecutionRequestRejectedE
 import xyz.hrishabhjoshi.codeexecutionengine.service.codeexecutionservice.ExecutionPayloadCodec;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -48,7 +50,12 @@ public class ExecutionV2Publisher {
         ensureIdentifiers(request);
         ExecutionV2Keys keys = v2Properties.toKeys();
         try {
-            String payloadBase64 = payloadCodec.encode(ExecutionRequestMapper.toSubmission(request));
+            String payloadBase64 = playground(request)
+                    ? Base64.getEncoder().encodeToString(objectMapper.writeValueAsBytes(new PlaygroundTaskPayload(
+                            request.getLanguage(),
+                            request.getCode(),
+                            request.getStdin())))
+                    : payloadCodec.encode(ExecutionRequestMapper.toSubmission(request));
             RunnerTaskEnvelope envelope = new RunnerTaskEnvelope(
                     ExecutionContractVersion.V2_RUNNER_QUEUE,
                     request.getExecutionId(),
@@ -104,6 +111,11 @@ public class ExecutionV2Publisher {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize v2 task", e);
         }
+    }
+
+    private static boolean playground(ExecutionRequest request) {
+        return request.getExecutionMode() != null
+                && "PLAYGROUND".equalsIgnoreCase(request.getExecutionMode());
     }
 
     static void ensureIdentifiers(ExecutionRequest request) {

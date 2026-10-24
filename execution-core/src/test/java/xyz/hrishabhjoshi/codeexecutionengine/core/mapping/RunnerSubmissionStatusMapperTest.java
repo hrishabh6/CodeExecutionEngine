@@ -67,4 +67,31 @@ class RunnerSubmissionStatusMapperTest {
         assertEquals("COMPLETED", status.getStatus());
         assertEquals("RUNTIME_ERROR", status.getErrorMessage());
     }
+
+    @Test
+    void mapsPlaygroundStdoutWithoutSubmissionVerdict() {
+        CodeExecutionResultDTO result = CodeExecutionResultDTO.builder()
+                .submissionId("playground-1")
+                .executionId("playground-1")
+                .overallStatus(Status.SUCCESS)
+                .compilationOutput("")
+                .testCaseOutputs(List.of(CodeExecutionResultDTO.TestCaseOutput.builder()
+                        .testCaseIndex(0)
+                        .actualOutput("42\n")
+                        .errorMessage("")
+                        .executionTimeMs(12)
+                        .build()))
+                .build();
+
+        SubmissionStatusDto status = RunnerSubmissionStatusMapper.playground(result, "runner-local", 1234L);
+
+        assertEquals("COMPLETED", status.getStatus());
+        assertEquals("PLAYGROUND", status.getExecutionMode());
+        assertEquals("SUCCESS", status.getRawExecutionStatus());
+        assertEquals("42\n", status.getStdout());
+        assertEquals("", status.getStderr());
+        assertEquals(0, status.getExitCode());
+        assertEquals(12, status.getRuntimeMs());
+        assertNull(status.getErrorMessage());
+    }
 }

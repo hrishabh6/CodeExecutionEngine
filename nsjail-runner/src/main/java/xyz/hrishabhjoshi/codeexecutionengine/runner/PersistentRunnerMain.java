@@ -87,8 +87,12 @@ public final class PersistentRunnerMain {
                     RunnerTerminalResult terminal = pipeline.execute(envelope, workspace);
                     RunnerCrashTestHooks.syncpoint("AFTER_EXECUTE_BEFORE_COMPLETE");
                     String resultJson = mapper.writeValueAsString(terminal);
-                    String statusJson = mapper.writeValueAsString(RunnerSubmissionStatusMapper.terminal(
-                            terminal.result(), config.runnerId(), System.currentTimeMillis()));
+                    String statusJson = mapper.writeValueAsString(
+                            envelope.mode() != null && "PLAYGROUND".equalsIgnoreCase(envelope.mode())
+                                    ? RunnerSubmissionStatusMapper.playground(
+                                            terminal.result(), config.runnerId(), System.currentTimeMillis())
+                                    : RunnerSubmissionStatusMapper.terminal(
+                                            terminal.result(), config.runnerId(), System.currentTimeMillis()));
                     RedisV2RunnerClient.CommitResult commit = redis.complete(
                             executionId,
                             envelope.submissionId(),

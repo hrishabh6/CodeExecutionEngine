@@ -48,6 +48,46 @@ public final class RunnerSubmissionStatusMapper {
                 .build();
     }
 
+    /**
+     * Playground polling contract. Compile and runtime failures stay {@code COMPLETED}
+     * with {@code rawExecutionStatus}; only infrastructure failures are {@code FAILED}.
+     * The single synthetic test-case slot carries stdout, stderr, exit code, and runtime.
+     */
+    public static SubmissionStatusDto playground(
+            CodeExecutionResultDTO result,
+            String workerId,
+            long completedAt) {
+        Status overallStatus = result.getOverallStatus();
+        String rawStatus = switch (overallStatus == null ? Status.INTERNAL_ERROR : overallStatus) {
+            case SUCCESS -> "SUCCESS";
+            case COMPILATON_ERROR -> "COMPILE_ERROR";
+            case RUNTIME_ERROR -> "RUNTIME_ERROR";
+            case TIMEOUT -> "TIME_LIMIT_EXCEEDED";
+            case INTERNAL_ERROR, UNKNOWN -> "INTERNAL_ERROR";
+        };
+        CodeExecutionResultDTO.TestCaseOutput output = result.getTestCaseOutputs() == null
+                || result.getTestCaseOutputs().isEmpty()
+                        ? null
+                        : result.getTestCaseOutputs().get(0);
+        boolean internal = "INTERNAL_ERROR".equals(rawStatus);
+        return SubmissionStatusDto.builder()
+                .submissionId(result.getSubmissionId())
+                .executionId(result.getExecutionId())
+                .status(internal ? "FAILED" : "COMPLETED")
+                .executionMode(ExecutionMode.PLAYGROUND.name())
+                .rawExecutionStatus(rawStatus)
+                .stdout(output == null || output.getActualOutput() == null ? "" : output.getActualOutput())
+                .stderr(output == null || output.getErrorMessage() == null ? "" : output.getErrorMessage())
+                .compilationOutput(result.getCompilationOutput() == null ? "" : result.getCompilationOutput())
+                .exitCode(output == null ? null : output.getTestCaseIndex())
+                .runtimeMs(output == null ? 0 : (int) Math.min(Integer.MAX_VALUE, output.getExecutionTimeMs()))
+                .outputTruncated(false)
+                .errorMessage(internal ? "INTERNAL_ERROR" : null)
+                .completedAt(completedAt)
+                .workerId(workerId)
+                .build();
+    }
+
     private static SubmissionStatusDto.TestCaseResult mapTestCase(CodeExecutionResultDTO.TestCaseOutput output) {
         return SubmissionStatusDto.TestCaseResult.builder()
                 .index(output.getTestCaseIndex())

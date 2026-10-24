@@ -14,7 +14,7 @@ public class ExecutionBackendRouter {
     private final ExecutionRoutingProperties routingProperties;
 
     public ExecutionRoutingProperties.Backend resolve(ExecutionMode mode) {
-        if (mode == ExecutionMode.SUBMISSION
+        if ((mode == ExecutionMode.SUBMISSION || mode == ExecutionMode.PLAYGROUND)
                 && v2Properties.isEnabled()
                 && routingProperties.isPersistentRunnerEnabled()
                 && routingProperties.backendFor(mode) == ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL) {

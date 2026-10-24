@@ -28,5 +28,19 @@ class ExecutionBackendRouterTest {
         ExecutionBackendRouter router = new ExecutionBackendRouter(v2, routing);
         assertEquals(ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL,
                 router.resolve(ExecutionMode.SUBMISSION));
+        assertEquals(ExecutionRoutingProperties.Backend.KUBERNETES_JOB,
+                router.resolve(ExecutionMode.PLAYGROUND));
+    }
+
+    @Test
+    void playgroundUsesPersistentNsjailOnlyWhenItsOwnBackendSaysSo() {
+        ExecutionV2Properties v2 = new ExecutionV2Properties();
+        v2.setEnabled(true);
+        ExecutionRoutingProperties routing = new ExecutionRoutingProperties();
+        routing.setPersistentRunnerEnabled(true);
+        routing.getModeBackends().put(ExecutionMode.PLAYGROUND, ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL);
+        ExecutionBackendRouter router = new ExecutionBackendRouter(v2, routing);
+        assertEquals(ExecutionRoutingProperties.Backend.PERSISTENT_NSJAIL,
+                router.resolve(ExecutionMode.PLAYGROUND));
     }
 }
